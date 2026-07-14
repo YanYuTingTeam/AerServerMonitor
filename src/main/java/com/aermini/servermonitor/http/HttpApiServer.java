@@ -74,6 +74,7 @@ public class HttpApiServer {
         }));
 
         server.createContext("/player/info", this::handlePlayerInfo);
+        server.createContext("/player/list", this::handlePlayerList);
         server.createContext("/player/kick", this::handlePlayerKick);
         server.createContext("/server/list", this::handleServerList);
         server.createContext("/server/info", this::handleServerInfo);
@@ -129,6 +130,15 @@ public class HttpApiServer {
         if (!checkAuth(exchange)) return;
         if ("POST".equals(exchange.getRequestMethod())) {
             playerHandler.handleKick(exchange);
+        } else {
+            sendMethodNotAllowed(exchange);
+        }
+    }
+
+    private void handlePlayerList(HttpExchange exchange) {
+        if (!checkAuth(exchange)) return;
+        if ("GET".equals(exchange.getRequestMethod())) {
+            playerHandler.handleList(exchange);
         } else {
             sendMethodNotAllowed(exchange);
         }

@@ -100,6 +100,43 @@ public class PlayerHandler {
         HttpApiServer.sendWithLog(exchange, 200, ApiResponse.success(logId, data), logManager);
     }
 
+    public void handleList(HttpExchange exchange) {
+        String ip = exchange.getRemoteAddress().getAddress().getHostAddress();
+        String logId = LogIdGenerator.generateLogId(ip);
+        Map<String, String> params = HttpApiServer.parseQuery(exchange.getRequestURI().getQuery());
+
+        int total = playerDAO.getOnlineCount();
+
+        String tParam = params.get("t");
+        String offsetParam = params.get("offset");
+
+        java.util.List<JsonObject> players;
+        if (tParam != null || offsetParam != null) {
+            int t = tParam != null ? Integer.parseInt(tParam) : total;
+            int offset = offsetParam != null ? Integer.parseInt(offsetParam) : 0;
+            players = playerDAO.getOnlinePlayers(t, offset);
+        } else {
+            players = playerDAO.getOnlinePlayers();
+        }
+
+        JsonArray arr = new JsonArray();
+        for (JsonObject p : players) {
+            JsonObject pp = new JsonObject();
+            pp.addProperty("name", p.get("name").getAsString());
+            pp.addProperty("uuid", p.get("uuid").getAsString());
+            String serverName = p.has("current_server") && !p.get("current_server").isJsonNull()
+                    ? p.get("current_server").getAsString() : null;
+            pp.add("server", serverName != null ? ServerInfoUtil.buildServerObject(serverName) : new JsonObject());
+            pp.addProperty("skin", skinDB.getSkinUuid(p.get("uuid").getAsString()));
+            arr.add(pp);
+        }
+
+        JsonObject data = new JsonObject();
+        data.addProperty("total", total);
+        data.add("players", arr);
+        HttpApiServer.sendWithLog(exchange, 200, ApiResponse.success(logId, data), logManager);
+    }
+
     public void handleKick(HttpExchange exchange) {
         String ip = exchange.getRemoteAddress().getAddress().getHostAddress();
         String logId = LogIdGenerator.generateLogId(ip);

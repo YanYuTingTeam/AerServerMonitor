@@ -121,6 +121,20 @@ public class PlayerDAO {
         return list;
     }
 
+    public List<JsonObject> getOnlinePlayers(int limit, int offset) {
+        List<JsonObject> list = new ArrayList<>();
+        String sql = "SELECT * FROM " + db.prefix() + "players WHERE online = TRUE LIMIT ? OFFSET ?";
+        try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            ps.setInt(2, offset);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(playerFromRs(rs));
+            }
+        } catch (SQLException ignored) {}
+        return list;
+    }
+
     public List<JsonObject> getPlayersByServer(String server) {
         List<JsonObject> list = new ArrayList<>();
         String sql = "SELECT * FROM " + db.prefix() + "players WHERE current_server = ? AND online = TRUE";
