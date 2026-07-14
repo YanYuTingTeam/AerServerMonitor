@@ -12,11 +12,9 @@ const API = {
         const token = this.getToken();
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
-        if (path.startsWith('/player/') || path.startsWith('/server/') ||
-            path.startsWith('/chat/') || path.startsWith('/system/') || path.startsWith('/log/')) {
+        if (token && !path.includes('/auth/login') && !path.includes('/auth/verify')) {
             const now = Date.now().toString();
             headers['a'] = now;
-
             headers['b'] = await this.computeHmac(method, body);
         }
 
@@ -38,8 +36,11 @@ const API = {
     },
 
     async computeHmac(method, body) {
-
-        return 'dashboard-internal';
+        const token = this.getToken() || '';
+        const data = (method !== 'GET' && method !== 'HEAD' && body)
+            ? (typeof body === 'string' ? body : JSON.stringify(body))
+            : '';
+        return HmacSha256(token, data);
     },
 
     get(path) { return this.request('GET', path); },
