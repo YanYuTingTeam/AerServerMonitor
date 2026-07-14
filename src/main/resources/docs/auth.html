@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鉴权 - AerServerMonitor</title>
+    <style>
+        :root { --bg: #fafafa; --surface: #fff; --border: #e8e8e8; --text: #1a1a1a; --text2: #666; --accent: #2563eb; --warn: #eab308; --ok: #22c55e; --danger: #ef4444; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #0a0a0a; --surface: #111; --border: #262626; --text: #f0f0f0; --text2: #a0a0a0; --accent: #3b82f6; --warn: #eab308; --ok: #22c55e; --danger: #ef4444; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+        .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+        h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 8px; }
+        h2 { font-size: 1.2rem; font-weight: 600; margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        h3 { font-size: 1rem; font-weight: 600; margin: 20px 0 8px; color: var(--accent); }
+        p { margin-bottom: 12px; color: var(--text2); }
+        code { background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-family: "SF Mono", Consolas, monospace; }
+        pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 12px 0; font-size: 0.8rem; }
+        pre code { border: none; padding: 0; background: none; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        th { font-weight: 600; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        a { color: var(--accent); }
+        .nav { margin-bottom: 24px; font-size: 0.85rem; }
+        .nav a { margin-right: 16px; }
+        .callout { background: var(--surface); border-left: 4px solid var(--accent); border-radius: 4px; padding: 12px 16px; margin: 16px 0; }
+        .callout-warn { border-left-color: var(--warn); }
+        .callout-danger { border-left-color: var(--danger); }
+        .callout-ok { border-left-color: var(--ok); }
+        .callout p { color: var(--text); margin-bottom: 6px; }
+        .callout p:last-child { margin-bottom: 0; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+        .badge-blue { background: rgba(59,130,246,0.15); color: var(--accent); }
+        .badge-green { background: rgba(34,197,94,0.15); color: var(--ok); }
+        .badge-red { background: rgba(239,68,68,0.15); color: var(--danger); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="./">首页</a>
+            <a href="auth.html">鉴权</a>
+            <a href="player.html">玩家</a>
+            <a href="server.html">子服</a>
+            <a href="chat.html">聊天</a>
+            <a href="system.html">系统</a>
+            <a href="log.html">日志</a>
+            <a href="errors.html">业务码</a>
+        </div>
+
+        <h1>鉴权</h1>
+        <p>系统采用 <strong>纵深防御 (defense in depth)</strong> 设计, 三条入口分别独立鉴权, 但共用相同的 HMAC 时间戳防重放思路.</p>
+
+        <div class="callout callout-ok">
+            <p><strong>三个入口</strong></p>
+            <p>1. <strong>外部 API</strong> — 仅 HMAC-MD5 (salt + body/origin)</p>
+            <p>2. <strong>Dashboard</strong> — JWT + HMAC-SHA256 (jwt + body) 双重校验 + CSRF Origin 防护</p>
+            <p>3. <strong>WebSocket</strong> — 握手时 JWT + HMAC-SHA256 (jwt + "ws-handshake:" + a) 校验</p>
+        </div>
+
+        <h2>一. 外部 API — HMAC-MD5 鉴权 <span class="badge badge-blue">第三方调用</span></h2>
+        <p>第三方程序调用 <code>/player/*</code> / <code>/server/*</code> / <code>/chat/*</code> / <code>/system/*</code> / <code>/log/*</code> 接口时, 必须携带以下两个请求头. <strong>不要同时携带 <code>Authorization</code> 头</strong> — 否则服务端会按 Dashboard 路径处理, 要求 SHA-256 双重校验, 校验失败.</p>
+
+        <table>
+            <tr><th>Header</th><th>说明</th></tr>
+            <tr><td><code>a</code></td><td>当前毫秒级时间戳. 仅容许 <code>header-a-timeoffset</code> 误差 (默认 15000ms)</td></tr>
+            <tr><td><code>b</code></td><td>HMAC-MD5 加密后的值 (16 进制). 算法和 salt 可在 config 修改</td></tr>
+        </table>
+
+        <h3>加密规则</h3>
+        <pre><code>// 伪代码
+String data;
+if (method == GET || method == HEAD) {
+    data = config.get("hmac-origin");  // 默认 "AerServerMonitor"
+} else {
+    data = requestBody;                // 整个 POST body
+}
+String header_b = HmacMD5(config.get("hmac-salt"), data);</code></pre>
+
+        <h3>curl 示例</h3>
+        <pre><code># GET /player/info?uuid=xxx
+A=$(date +%s%3N)
+B=$(echo -n "AerServerMonitor" | openssl dgst -md5 -hmac "AerServerMonitor" | awk '{print $NF}')
+curl -H "a: $A" -H "b: $B" "http://localhost:8009/player/info?uuid=xxx"
+
+# POST /player/kick?uuid=xxx
+A=$(date +%s%3N)
+BODY='You are kicked'
+B=$(echo -n "$BODY" | openssl dgst -md5 -hmac "AerServerMonitor" | awk '{print $NF}')
+curl -X POST -H "Content-Type: application/json" -H "a: $A" -H "b: $B" \
+     -d "$BODY" "http://localhost:8009/player/kick?uuid=xxx"</code></pre>
+
+        <div class="callout callout-warn">
+            <p><strong>算法说明</strong></p>
+            <p>外部 API 默认使用 <code>HmacMD5</code> (在 <code>config.yml &gt; options.hmac-algorithm</code> 中可改为 <code>HmacSHA256</code>). 选择 MD5 是为了与原始开发规范保持一致.</p>
+            <p>外部 API 路径<strong>不</strong>做 CSRF Origin 校验 — 这是设计上允许第三方程序跨域调用.</p>
+        </div>
+
+        <h2>二. Dashboard — JWT + HMAC-SHA256 双重校验 + CSRF 防护 <span class="badge badge-green">内置前端</span></h2>
+        <p>内置 Dashboard (路径 <code>/dashboard</code>) 使用 <strong>JWT + HMAC-SHA256</strong> 双重校验. 即便 JWT 从日志或 Referer 泄露, 攻击者仍需正确计算 HMAC 才能伪造请求. 同时通过 Origin 校验防御 CSRF.</p>
+
+        <h3>2.1 登录流程</h3>
+        <ol>
+            <li>调用 <code>POST /api/auth/login</code> 用账号密码换取 JWT token (无需 a/b 头, 但需通过 Origin 校验).</li>
+            <li>JWT 包含 <code>admin_id</code> / <code>username</code> / <code>role</code> / <code>token_version</code> / <code>exp</code>.</li>
+            <li>改密后 <code>token_version</code> 自增, 所有旧 token 立即失效.</li>
+        </ol>
+
+        <h3>2.2 后续请求 — 每个请求都需同时携带</h3>
+        <table>
+            <tr><th>Header</th><th>说明</th></tr>
+            <tr><td><code>Authorization</code></td><td><code>Bearer &lt;jwt&gt;</code> — 服务端校验签名 (HMAC-SHA256 + <code>dashboard.secret</code>) / 过期 / token_version</td></tr>
+            <tr><td><code>a</code></td><td>当前毫秒级时间戳. 与外部 API 共用同一容差配置</td></tr>
+            <tr><td><code>b</code></td><td><strong>HmacSHA256(jwt, body || "")</strong> — 用 JWT 本身做 key, 无需暴露全局 salt 给浏览器</td></tr>
+        </table>
+
+        <h3>2.3 b 头加密规则</h3>
+        <pre><code>// 前端 (dashboard/js/api.js + dashboard/js/hmac.js)
+const token = localStorage.getItem('token');
+const a = Date.now().toString();
+let data;
+if (method === 'GET' || method === 'HEAD') {
+    data = '';                  // GET: 空字符串
+} else {
+    data = JSON.stringify(body); // POST: 整个 body
+}
+const b = HmacSha256(token, data);  // 纯 JS SHA-256 实现, 兼容 HTTP 非 secure context
+
+// headers
+headers['Authorization'] = 'Bearer ' + token;
+headers['a'] = a;
+headers['b'] = b;</code></pre>
+
+        <div class="callout">
+            <p><strong>为什么用 JWT 做 HMAC key, 而不是全局 salt?</strong></p>
+            <p>浏览器是公开客户端, 任何写在 JS 里的密钥都能被攻击者读取. 用 JWT 本身做 key 实现"请求级密钥", 即便全局 salt 泄露也无法伪造请求, 因为攻击者拿不到当前会话的 JWT.</p>
+        </div>
+
+        <div class="callout">
+            <p><strong>为什么用纯 JS SHA-256 而不是 Web Crypto API?</strong></p>
+            <p><code>crypto.subtle</code> 仅在 secure context (HTTPS / localhost / file://) 下可用. BungeeCord Dashboard 通常通过 <code>http://vps-ip:8009/dashboard/</code> 访问, 是非 secure context, <code>crypto.subtle</code> 会是 <code>undefined</code>. 纯 JS 实现任意上下文都能工作.</p>
+        </div>
+
+        <h3>2.4 CSRF 防护 — Origin / Referer 校验</h3>
+        <p>所有 POST / DELETE / PUT 请求强制校验 <code>Origin</code> (或 <code>Referer</code>) 头:</p>
+        <ul>
+            <li><strong>同源</strong>: <code>Origin</code> 的 host == <code>Host</code> 头 → 放行</li>
+            <li><strong>白名单</strong>: <code>Origin</code> 在 <code>options.dashboard.allowed-origins</code> 中 → 放行</li>
+            <li><strong>其他</strong> → 403 拒绝</li>
+            <li>GET / HEAD / OPTIONS 不校验 (安全方法不改变状态)</li>
+        </ul>
+
+        <pre><code># config.yml
+options:
+  dashboard:
+    allowed-origins: []   # 空 = 仅同源; 跨域访问填如 ["https://monitor.example.com"]
+    csrf-protection: true # 关闭后 POST 不校验 Origin (不建议)</code></pre>
+
+        <p><code>/api/auth/login</code> 是无鉴权 POST, 同样走 Origin 校验, 防止 login CSRF (攻击者诱导用户在恶意页面提交登录表单到本服务).</p>
+
+        <h3>2.5 CORS 收紧</h3>
+        <p>响应头 <code>Access-Control-Allow-Origin</code> 不再写死 <code>*</code>, 改为按 Origin 动态回显:</p>
+        <ul>
+            <li>同源或白名单 Origin → 回显该 Origin + <code>Vary: Origin</code></li>
+            <li>其他 → 不设 ACAO, 浏览器自动拒绝跨源响应</li>
+            <li>不设 <code>Access-Control-Allow-Credentials: true</code> — 因为我们用 Authorization 头 (非 cookie) 鉴权, 浏览器不会自动带凭据</li>
+        </ul>
+
+        <h2>三. WebSocket — 握手时 JWT + HMAC-SHA256 校验 <span class="badge badge-green">实时推送</span></h2>
+        <p>WebSocket 端口 = HTTP 端口 + 1 (默认 8010). 浏览器 WebSocket API 不允许自定义请求头, 因此鉴权信息通过 <strong>查询参数</strong> 在握手阶段传递:</p>
+
+        <h3>3.1 连接 URL</h3>
+        <pre><code>ws://&lt;host&gt;:&lt;ws-port&gt;/?token=&lt;jwt&gt;&a=&lt;毫秒时间戳&gt;&b=&lt;HMAC&gt;</code></pre>
+
+        <h3>3.2 b 头加密规则</h3>
+        <pre><code>// 前端 (dashboard/js/ws.js)
+const token = localStorage.getItem('token');
+const a = Date.now().toString();
+// 关键: "ws-handshake:" 前缀做上下文绑定, 防止 HTTP API 的 a/b 头日志被拿到 WS 重放
+// a 也绑入 b, 防止在 15s 窗口内单独重放 a
+const b = HmacSha256(token, 'ws-handshake:' + a);
+
+const url = `ws://${host}:${wsPort}/?token=${encodeURIComponent(token)}&a=${a}&b=${b}`;</code></pre>
+
+        <h3>3.3 服务端校验 (在 HTTP 升级握手阶段)</h3>
+        <ol>
+            <li><strong>JWT 校验</strong>: 签名 + 过期 + token_version (与 Dashboard 同源)</li>
+            <li><strong>a 时间戳容差</strong>: <code>|now - a| &lt;= header-a-timeoffset</code> (默认 15s)</li>
+            <li><strong>b HMAC 校验</strong>: <code>b == HmacSHA256(token, "ws-handshake:" + a)</code></li>
+            <li><strong>连接数限制</strong>: <code>sessions.size &lt; ws.max-connections</code> (默认 500)</li>
+        </ol>
+
+        <p>任何一项失败: 返回 HTTP 401, <strong>不</strong>进行 WebSocket 升级. 浏览器收到非 101 响应后会触发 <code>onerror</code> + <code>onclose</code>.</p>
+
+        <div class="callout callout-danger">
+            <p><strong>WS 鉴权失败不会跳登录</strong></p>
+            <p>握手阶段的 401 是 HTTP 响应, 不会升级到 WebSocket, 浏览器无法区分"鉴权失败"和"服务不可达". 前端 <code>ws.js</code> 在 <code>onclose</code> 时统一走指数退避重连; 如果 JWT 过期, 重连会持续失败. 用户需手动刷新页面 (触发 <code>/api/auth/verify</code> 跳登录).</p>
+        </div>
+
+        <h3>3.4 鉴权通过后</h3>
+        <p>channel attr 记录 <code>admin_id</code> / <code>admin_name</code> 便于审计. 客户端发送 <code>{"action":"subscribe","events":["all"]}</code> 后开始接收事件. 服务端会自动推送 <code>__batch</code> 批量消息 (100ms 窗口聚合, 队列上限 50k), 前端展开后逐条派发.</p>
+
+        <h2>四. IP 白名单</h2>
+        <p>服主可在 config 中开启 IP 白名单鉴权 (在 HMAC/JWT 校验之前). 支持精确 IP 和 CIDR 网段 (如 <code>192.168.0.0/16</code>).</p>
+        <pre><code>options:
+  ssrf-protection:
+    enabled: true
+    mode: "whitelist"   # 或 "blacklist"
+    whitelist:
+      - "127.0.0.1"
+      - "192.168.0.0/16"
+      - "10.0.0.0/8"</code></pre>
+
+        <h2>五. 速率限制</h2>
+        <p>每个 IP 在 <code>per-time</code> (默认 2000ms) 窗口内最多 <code>max-request-per-time</code> (默认 3) 次请求. 超限返回 429 + errcode 50003. 持续超限可能触发临时封禁.</p>
+
+        <h2>六. 鉴权失败响应</h2>
+        <h3>HTTP API / Dashboard</h3>
+        <pre><code>{
+    "code": 500,
+    "errcode": 50001,
+    "message": "网络故障",
+    "time": 1720886400000,
+    "logid": "20260714024600ABCD1234A1E5F8G2",
+    "data": {}
+}</code></pre>
+
+        <h3>WebSocket 握手失败</h3>
+        <pre><code>HTTP/1.1 401 Unauthorized
+Content-Type: application/json; charset=utf-8
+
+{"code":401,"errcode":50001,"message":"invalid token"}</code></pre>
+        <p>message 可能是 <code>missing credentials</code> / <code>invalid token</code> / <code>invalid timestamp</code> / <code>timestamp expired</code> / <code>hmac mismatch</code> 之一.</p>
+
+        <h3>CSRF Origin 校验失败</h3>
+        <pre><code>{
+    "code": 403,
+    "errcode": 50001,
+    "message": "origin not allowed",
+    "time": 1720886400000,
+    "logid": "...",
+    "data": {}
+}</code></pre>
+
+        <h2>七. 配置项汇总</h2>
+        <table>
+            <tr><th>配置项</th><th>默认值</th><th>说明</th></tr>
+            <tr><td><code>options.hmac-salt</code></td><td><code>AerServerMonitor</code></td><td>外部 API HMAC 密钥</td></tr>
+            <tr><td><code>options.hmac-origin</code></td><td><code>AerServerMonitor</code></td><td>外部 API GET 请求 HMAC 源文本</td></tr>
+            <tr><td><code>options.hmac-algorithm</code></td><td><code>HmacMD5</code></td><td>外部 API HMAC 算法 (可改 HmacSHA256)</td></tr>
+            <tr><td><code>options.header-a-timeoffset</code></td><td><code>15000</code></td><td>a 头时间戳容差 (ms) — 同时作用于外部 API 和 Dashboard</td></tr>
+            <tr><td><code>options.dashboard.secret</code></td><td><code>CHANGE_ME_...</code></td><td>JWT 签名密钥 (HMAC-SHA256) — 务必修改</td></tr>
+            <tr><td><code>options.dashboard.session-expire</code></td><td><code>86400000</code></td><td>JWT 过期时间 (ms) — 默认 24h</td></tr>
+            <tr><td><code>options.dashboard.allowed-origins</code></td><td><code>[]</code></td><td>CORS / CSRF Origin 白名单, 空表示仅同源</td></tr>
+            <tr><td><code>options.dashboard.csrf-protection</code></td><td><code>true</code></td><td>是否对 POST/DELETE 强制 Origin 校验</td></tr>
+            <tr><td><code>options.ws.max-connections</code></td><td><code>500</code></td><td>WebSocket 最大并发连接数</td></tr>
+        </table>
+    </div>
+</body>
+</html>

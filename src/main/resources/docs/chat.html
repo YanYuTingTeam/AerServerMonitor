@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天相关 - AerServerMonitor</title>
+    <style>
+        :root { --bg: #fafafa; --surface: #fff; --border: #e8e8e8; --text: #1a1a1a; --text2: #666; --accent: #2563eb; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #0a0a0a; --surface: #111; --border: #262626; --text: #f0f0f0; --text2: #a0a0a0; --accent: #3b82f6; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+        h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 24px; }
+        h2 { font-size: 1.2rem; font-weight: 600; margin: 28px 0 12px; }
+        h3 { font-size: 1rem; font-weight: 600; margin: 20px 0 8px; }
+        p { margin-bottom: 12px; color: var(--text2); }
+        code { background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-family: "SF Mono", Consolas, monospace; }
+        pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 12px 0; font-size: 0.8rem; }
+        pre code { border: none; padding: 0; background: none; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        th { font-weight: 600; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-right: 8px; }
+        .method-get { background: rgba(34,197,94,0.1); color: #22c55e; }
+        .method-post { background: rgba(59,130,246,0.1); color: #3b82f6; }
+        a { color: var(--accent); }
+        .nav { margin-bottom: 24px; font-size: 0.85rem; }
+        .nav a { margin-right: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="./">首页</a>
+            <a href="auth.html">鉴权</a>
+            <a href="player.html">玩家</a>
+            <a href="server.html">子服</a>
+            <a href="chat.html">聊天</a>
+            <a href="system.html">系统</a>
+            <a href="log.html">日志</a>
+            <a href="errors.html">业务码</a>
+        </div>
+
+        <h1>聊天相关</h1>
+
+        <h2><span class="method method-post">POST</span> /chat/command</h2>
+        <p>使用命令. 整个 body 为命令内容.</p>
+
+        <h3>请求示例</h3>
+        <pre><code>POST /chat/command
+Body: /glist</code></pre>
+
+        <h3>成功响应</h3>
+        <pre><code>{
+    "code": 200,
+    "errcode": 0,
+    "message": "CONSOLE executed command: /glist\n[pit] (1): ApartPenguin141\n[lobby] (1): YukiEnd\nTotal players online: 2",
+    "data": {}
+}</code></pre>
+        <p>message 为命令执行后的返回内容. 可能为空.</p>
+
+        <h3>命令不存在</h3>
+        <pre><code>{
+    "code": 404,
+    "errcode": 30001,
+    "message": "Command not found",
+    "data": {}
+}</code></pre>
+
+        <h3>命令执行出错</h3>
+        <pre><code>{
+    "code": 500,
+    "errcode": 30002,
+    "message": "line1\nline2\nAn Internal error occurred while exec...",
+    "data": {}
+}</code></pre>
+        <p>如果命令执行到一半才报错, message 会包含已经输出的内容和报错信息.</p>
+
+        <h2><span class="method method-get">GET</span> /chat/history</h2>
+        <p>获取聊天记录. 参数可不带, 可只带一个, 可全带.</p>
+        <table>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+            <tr><td><code>timefrom</code></td><td>long(ms)</td><td>否</td><td>从这个时间开始的消息</td></tr>
+            <tr><td><code>timeto</code></td><td>long(ms)</td><td>否</td><td>到这个时间截止的消息</td></tr>
+        </table>
+
+        <h3>响应</h3>
+        <pre><code>{
+    "code": 200,
+    "errcode": 0,
+    "message": "success",
+    "data": {
+        "messages": [
+            {
+                "msgid": "20260714024600ABCD1234A1E5F8G2",
+                "count": 156,
+                "daycount": 23,
+                "time": 1720886400000,
+                "name": "Steve",
+                "uuid": "xxx-xxx-xxx",
+                "server": {
+                    "name": "lobby",
+                    "ip": "127.0.0.1:25577",
+                    "describe": "A Lobby"
+                },
+                "content": "hello everyone"
+            }
+        ]
+    }
+}</code></pre>
+        <p><code>count</code> 为该玩家总发言数, <code>daycount</code> 为该玩家当日发言数.</p>
+
+        <h3>参数错误</h3>
+        <pre><code>{
+    "code": 400,
+    "errcode": 0,
+    "message": "参数错误",
+    "data": {}
+}</code></pre>
+    </div>
+</body>
+</html>

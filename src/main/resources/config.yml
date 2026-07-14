@@ -1,0 +1,116 @@
+database:
+  monitor:
+    type: h2
+    address: "localhost:3306"
+    username: root
+    password: pw
+    database: db
+    table_prefix: asmonitor_
+    pool:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      keepalive-time: 30000
+  skin:
+    type: h2
+    address: ""
+    username: ""
+    password: ""
+    database: ""
+    table: skinr_players
+    pool:
+      maximum-pool-size: 5
+      minimum-idle: 1
+
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: ""
+  database: 0
+  pool:
+    max-total: 16
+    max-idle: 8
+    min-idle: 2
+  retry:
+    max-attempts: 3
+    interval-ms: 5000
+    health-check-interval-ms: 10000
+    degraded-threshold: 3
+
+postUrls:
+  playerJoinServer: ""
+  playerChat: ""
+  playerExecuteCmd: ""
+  playerJoin: ""
+  playerLeave: ""
+  proxyPing: ""
+  playerWasKicked: ""
+  playerClickChat: ""
+
+options:
+  http-port: 8009
+  ws-port: 8010
+  hmac-salt: "AerServerMonitor"
+  hmac-origin: "AerServerMonitor"
+  hmac-algorithm: "HmacMD5"
+  exec-cmd-as-playerChat: false
+  header-a-timeoffset: 15000
+  max-request-per-time: 3
+  per-time: 2000
+  banned-time: 60000
+  ssrf-protection:
+    enabled: true
+    mode: "whitelist"
+    whitelist:
+      - "127.0.0.1"
+      - "192.168.0.0/16"
+      - "10.0.0.0/8"
+      - "s:*"
+    blacklist:
+      - "169.254.169.254"
+      - "0.0.0.0"
+  async:
+    event-pool-size: 4
+    event-pool-queue: 5000
+    post-pool-size: 2
+    post-pool-queue: 2000
+    post-retry-max: 3
+    post-retry-interval-ms: [1000, 5000, 30000]
+    log-flush-interval-ms: 100
+    chat-batch-size: 50
+    chat-batch-interval-ms: 100
+    webhook-queue-max: 5000
+  ws:
+    max-connections: 500
+    ping-interval-ms: 30000
+    pong-timeout-ms: 10000
+  dashboard:
+    enabled: true
+    path: "/dashboard"
+    session-expire: 86400000
+    secret: "CHANGE_ME_TO_RANDOM_STRING"
+    # CORS / CSRF Origin 白名单。
+    # 留空 → 仅允许同源请求（浏览器 Origin 与 Host 一致）。
+    # 如需跨域访问 Dashboard 或 API，显式列出允许的来源，例如：
+    #   - "https://monitor.example.com"
+    #   - "http://127.0.0.1:8009"
+    allowed-origins: []
+    # 是否对 POST/DELETE 等状态变更请求强制校验 Origin/Referer（CSRF 防护）
+    csrf-protection: true
+    login-security:
+      max-attempts: 5
+      window-ms: 300000
+      lockout-ms: 300000
+      permanent-ban-threshold: 3
+      ban-scope: "ip-24"
+      clean-ban-interval-ms: 86400000
+  admin-username: "admin"
+  admin-password: "AerServerMonitor"
+
+logs:
+  print-chat: false
+  print-request: false
+  file-retention-days: 30
+  file-max-size-mb: 100

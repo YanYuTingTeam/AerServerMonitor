@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>玩家相关 - AerServerMonitor</title>
+    <style>
+        :root { --bg: #fafafa; --surface: #fff; --border: #e8e8e8; --text: #1a1a1a; --text2: #666; --accent: #2563eb; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #0a0a0a; --surface: #111; --border: #262626; --text: #f0f0f0; --text2: #a0a0a0; --accent: #3b82f6; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+        h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 24px; }
+        h2 { font-size: 1.2rem; font-weight: 600; margin: 28px 0 12px; }
+        p { margin-bottom: 12px; color: var(--text2); }
+        code { background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-family: "SF Mono", Consolas, monospace; }
+        pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 12px 0; font-size: 0.8rem; }
+        pre code { border: none; padding: 0; background: none; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        th { font-weight: 600; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-right: 8px; }
+        .method-get { background: rgba(34,197,94,0.1); color: #22c55e; }
+        .method-post { background: rgba(59,130,246,0.1); color: #3b82f6; }
+        a { color: var(--accent); }
+        .nav { margin-bottom: 24px; font-size: 0.85rem; }
+        .nav a { margin-right: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="./">首页</a>
+            <a href="auth.html">鉴权</a>
+            <a href="player.html">玩家</a>
+            <a href="server.html">子服</a>
+            <a href="chat.html">聊天</a>
+            <a href="system.html">系统</a>
+            <a href="log.html">日志</a>
+            <a href="errors.html">业务码</a>
+        </div>
+
+        <h1>玩家相关</h1>
+
+        <h2><span class="method method-get">GET</span> /player/info</h2>
+        <p>获取玩家信息. 支持批量查询, 参数用逗号分隔, 按顺序一一校验.</p>
+        <table>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+            <tr><td><code>uuid</code></td><td>string</td><td>否</td><td>玩家 UUID (逗号分隔支持批量)</td></tr>
+            <tr><td><code>name</code></td><td>string</td><td>否</td><td>玩家名 (逗号分隔支持批量)</td></tr>
+        </table>
+        <p>如果两个参数都带了, 则校验 uuid 和 name 是否为同一个人. 如果不是则返回对应业务码.</p>
+
+        <h3>正常响应</h3>
+        <pre><code>{
+    "code": 200,
+    "errcode": 0,
+    "message": "success",
+    "data": {
+        "name": "Steve",
+        "uuid": "xxx-xxx-xxx",
+        "ip": "192.168.1.50",
+        "online": true,
+        "server": {
+            "name": "lobby",
+            "ip": "127.0.0.1:25577",
+            "describe": "A Lobby"
+        },
+        "skin": "xxx-xxx-xxx",
+        "firstjoin": 1720000000000,
+        "lastjoin": 1720886400000,
+        "leave": 0
+    }
+}</code></pre>
+
+        <h3>玩家不在线</h3>
+        <p>errcode 为 10006, 但如果有记录仍会正常返回 data (返回的是最后一次记录的数据).</p>
+
+        <h3>批量查询</h3>
+        <p>参数用逗号分隔, 如 <code>?uuid=uuid1,uuid2,uuid3</code>. 返回 <code>data.players</code> 数组, 每个元素独立携带对应的 code 和 errcode.</p>
+        <pre><code>{
+    "code": 200,
+    "errcode": 0,
+    "data": {
+        "players": [
+            {"code": 200, "errcode": 0, "player": {...}},
+            {"code": 400, "errcode": 10006, "player": {...}},
+            {"code": 400, "errcode": 10001, "player": null}
+        ]
+    }
+}</code></pre>
+
+        <h2><span class="method method-post">POST</span> /player/kick</h2>
+        <p>从代理端踢出玩家. 整个 body 作为踢出理由.</p>
+        <table>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+            <tr><td><code>uuid</code></td><td>string</td><td>否</td><td>玩家 UUID</td></tr>
+            <tr><td><code>name</code></td><td>string</td><td>否</td><td>玩家名</td></tr>
+        </table>
+
+        <h3>成功响应</h3>
+        <pre><code>{
+    "code": 200,
+    "errcode": 0,
+    "message": "success",
+    "data": {
+        "name": "Steve",
+        "uuid": "xxx-xxx-xxx",
+        "ip": "192.168.1.50",
+        "server": {
+            "name": "lobby",
+            "ip": "127.0.0.1:25577",
+            "describe": "A Lobby"
+        },
+        "skin": "xxx-xxx-xxx"
+    }
+}</code></pre>
+
+        <h3>玩家不在线/不存在</h3>
+        <p>code 为 400, errcode 为 10003/10004/10005/10006. data 中只返回有记录的字段, server 为 <code>{}</code>.</p>
+    </div>
+</body>
+</html>

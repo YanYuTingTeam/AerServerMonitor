@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AerServerMonitor - Change Password</title>
+    <style>
+        :root {
+            --bg: #0a0a0a; --surface: #111111; --border: #262626;
+            --text: #f0f0f0; --text-secondary: #a0a0a0;
+            --accent: #3b82f6; --accent-hover: #2563eb; --danger: #ef4444;
+        }
+        @media (prefers-color-scheme: light) {
+            :root:not([data-theme="dark"]) {
+                --bg: #fafafa; --surface: #ffffff; --border: #e8e8e8;
+                --text: #1a1a1a; --text-secondary: #666666;
+                --accent: #2563eb; --accent-hover: #1d4ed8; --danger: #dc2626;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            background: var(--bg); color: var(--text);
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+        }
+        .container {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 40px; width: 100%; max-width: 380px;
+        }
+        .logo { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 8px; }
+        .subtitle { font-size: 0.85rem; color: var(--text-secondary); text-align: center; margin-bottom: 32px; }
+        .warning {
+            background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3);
+            border-radius: 8px; padding: 12px; margin-bottom: 20px;
+            font-size: 0.8rem; color: #eab308; text-align: center;
+        }
+        .form-group { margin-bottom: 16px; }
+        label {
+            display: block; font-size: 0.8rem; font-weight: 500;
+            color: var(--text-secondary); margin-bottom: 6px;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        input {
+            width: 100%; padding: 10px 12px; background: var(--bg);
+            border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); font-size: 0.9rem; outline: none;
+        }
+        input:focus { border-color: var(--accent); }
+        button {
+            width: 100%; padding: 10px; background: var(--accent); color: #fff;
+            border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; margin-top: 8px;
+        }
+        button:hover { background: var(--accent-hover); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .error { color: var(--danger); font-size: 0.8rem; margin-top: 12px; text-align: center; display: none; }
+        .success { color: #22c55e; font-size: 0.8rem; margin-top: 12px; text-align: center; display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="logo">AerServerMonitor</div>
+    <div class="subtitle">Change Password</div>
+    <div class="warning">Default password detected. Please change it now.</div>
+    <form onsubmit="handleChange(event)">
+        <div class="form-group">
+            <label>Current Password</label>
+            <input type="password" id="oldPw" required>
+        </div>
+        <div class="form-group">
+            <label>New Password</label>
+            <input type="password" id="newPw" minlength="6" required>
+        </div>
+        <div class="form-group">
+            <label>Confirm Password</label>
+            <input type="password" id="confirmPw" minlength="6" required>
+        </div>
+        <button type="submit" id="btn">Change Password</button>
+        <div class="error" id="err"></div>
+        <div class="success" id="ok"></div>
+    </form>
+</div>
+<script src="js/hmac.js"></script>
+<script src="js/api.js"></script>
+<script>
+    const basePath = '';
+
+    async function handleChange(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btn');
+        const err = document.getElementById('err');
+        const ok = document.getElementById('ok');
+        btn.disabled = true; err.style.display = 'none'; ok.style.display = 'none';
+
+        const newPw = document.getElementById('newPw').value;
+        const confirmPw = document.getElementById('confirmPw').value;
+        if (newPw !== confirmPw) {
+            err.textContent = 'Passwords do not match';
+            err.style.display = 'block';
+            btn.disabled = false;
+            return;
+        }
+
+        try {
+            // 走 API 客户端 —— 会自动携带 a/b HMAC 头
+            const data = await API.changePassword(
+                document.getElementById('oldPw').value,
+                newPw
+            );
+            if (data.code === 200) {
+                ok.textContent = 'Password changed. Redirecting...';
+                ok.style.display = 'block';
+                setTimeout(() => location.href = '/dashboard/', 1500);
+            } else {
+                err.textContent = data.message || 'Failed';
+                err.style.display = 'block';
+            }
+        } catch (ex) {
+            err.textContent = 'Connection failed';
+            err.style.display = 'block';
+        }
+        btn.disabled = false;
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>业务码 - AerServerMonitor</title>
+    <style>
+        :root { --bg: #fafafa; --surface: #fff; --border: #e8e8e8; --text: #1a1a1a; --text2: #666; --accent: #2563eb; }
+        @media (prefers-color-scheme: dark) { :root { --bg: #0a0a0a; --surface: #111; --border: #262626; --text: #f0f0f0; --text2: #a0a0a0; --accent: #3b82f6; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+        h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 24px; }
+        h2 { font-size: 1.2rem; font-weight: 600; margin: 28px 0 12px; }
+        p { margin-bottom: 12px; color: var(--text2); }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        th { font-weight: 600; color: var(--text2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        code { background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-family: "SF Mono", Consolas, monospace; }
+        a { color: var(--accent); }
+        .nav { margin-bottom: 24px; font-size: 0.85rem; }
+        .nav a { margin-right: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="./">首页</a>
+            <a href="auth.html">鉴权</a>
+            <a href="player.html">玩家</a>
+            <a href="server.html">子服</a>
+            <a href="chat.html">聊天</a>
+            <a href="system.html">系统</a>
+            <a href="log.html">日志</a>
+            <a href="errors.html">业务码</a>
+        </div>
+
+        <h1>业务码</h1>
+        <p>所有响应中的 <code>errcode</code> 字段含义.</p>
+
+        <h2>通用</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>0</code></td><td>通用无业务码</td><td>-</td></tr>
+        </table>
+
+        <h2>玩家相关 (10xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>10001</code></td><td>通过 uuid 找不到玩家</td><td>无该玩家的记录</td></tr>
+            <tr><td><code>10002</code></td><td>通过 name 找不到玩家</td><td>无该玩家的记录</td></tr>
+            <tr><td><code>10003</code></td><td>uuid 和 name 不匹配</td><td>找到了 uuid 匹配的玩家, 但 name 不一致</td></tr>
+            <tr><td><code>10004</code></td><td>uuid 和 name 不匹配</td><td>找到了 name 匹配的玩家, 但 uuid 不一致</td></tr>
+            <tr><td><code>10005</code></td><td>uuid 和 name 都找不到</td><td>无该玩家的记录</td></tr>
+            <tr><td><code>10006</code></td><td>玩家不在线</td><td>找到了玩家但他不在线</td></tr>
+            <tr><td><code>10007</code></td><td>批量查询部分未找到</td><td>不影响其他正常结果</td></tr>
+            <tr><td><code>10008</code></td><td>批量查询部分不在线</td><td>不影响其他正常结果</td></tr>
+        </table>
+
+        <h2>子服相关 (20xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>20001</code></td><td>服务器离线</td><td>服务器未启动或 IP 无法连接</td></tr>
+            <tr><td><code>20002</code></td><td>通过 name 找不到子服</td><td>bungee 配置中没有这个子服</td></tr>
+            <tr><td><code>20003</code></td><td>通过 port 找不到子服</td><td>bungee 配置中没有端口为 port 的子服</td></tr>
+            <tr><td><code>20004</code></td><td>name 和 port 不匹配</td><td>找到了 name 匹配的子服, 但 port 不一致</td></tr>
+            <tr><td><code>20005</code></td><td>name 和 port 不匹配</td><td>找到了 port 匹配的子服, 但 name 不一致</td></tr>
+            <tr><td><code>20006</code></td><td>port 匹配到的子服过多</td><td>匹配数量超过 1</td></tr>
+            <tr><td><code>20007</code></td><td>name 匹配到的子服过多</td><td>不影响正常返回数据</td></tr>
+            <tr><td><code>20008</code></td><td>子服不存在</td><td>通过 name 和 port 均未找到</td></tr>
+            <tr><td><code>20009</code></td><td>批量查询部分未找到</td><td>不影响其他正常结果</td></tr>
+            <tr><td><code>20010</code></td><td>批量查询部分离线</td><td>不影响其他正常结果</td></tr>
+        </table>
+
+        <h2>命令相关 (30xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>30001</code></td><td>命令不存在</td><td>使用了未注册的命令</td></tr>
+            <tr><td><code>30002</code></td><td>命令执行出错</td><td>命令实现时产生内部错误</td></tr>
+            <tr><td><code>30003</code></td><td>命令执行超时</td><td>执行时间过长</td></tr>
+        </table>
+
+        <h2>数据库相关 (40xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>40001</code></td><td>数据库连接失败</td><td>数据库未连接</td></tr>
+            <tr><td><code>40002</code></td><td>数据库查询出错</td><td>SQL 执行异常</td></tr>
+        </table>
+
+        <h2>安全相关 (50xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>50001</code></td><td>鉴权失败</td><td>外部 API: HMAC-MD5 校验不通过; Dashboard: JWT 无效 / 过期 / token_version 不匹配 / a 头时间戳超容差 / b 头 HmacSHA256 不匹配; WebSocket 握手: 同 Dashboard</td></tr>
+            <tr><td><code>50002</code></td><td>SSRF 防护</td><td>目标 IP 不在允许列表中</td></tr>
+            <tr><td><code>50003</code></td><td>请求被限流</td><td>IP 已被封禁</td></tr>
+            <tr><td><code>50004</code></td><td>Redis 连接失败</td><td>降级模式</td></tr>
+        </table>
+
+        <h2>WebSocket 相关 (60xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>60001</code></td><td>连接数达到上限</td><td>WebSocket 连接数超过 <code>ws.max-connections</code> (默认 500)</td></tr>
+            <tr><td><code>60002</code></td><td>鉴权失败</td><td>握手时 token / a / b 任一缺失或校验失败, 详细 message 见 <a href="auth.html">鉴权文档</a></td></tr>
+        </table>
+
+        <div class="callout" style="background:var(--surface);border-left:4px solid var(--accent);padding:12px 16px;margin:16px 0;border-radius:4px;">
+            <p style="color:var(--text);"><strong>CSRF 校验失败</strong></p>
+            <p>当 POST/DELETE/PUT 请求的 Origin/Referer 既非同源也不在白名单时, 服务端返回:</p>
+            <p><code>{"code":403, "errcode":50001, "message":"origin not allowed"}</code></p>
+            <p>这是与 50001 鉴权失败不同的场景, 但共用 errcode 便于前端统一处理.</p>
+        </div>
+
+        <h2>日志相关 (70xxx)</h2>
+        <table>
+            <tr><th>errcode</th><th>含义</th><th>可能原因</th></tr>
+            <tr><td><code>70001</code></td><td>日志文件不存在</td><td>未找到日志文件</td></tr>
+            <tr><td><code>70002</code></td><td>日志查询参数错误</td><td>参数类型错误</td></tr>
+            <tr><td><code>70003</code></td><td>ID 未找到</td><td>logid/msgid/eventid 未找到对应记录</td></tr>
+            <tr><td><code>70004</code></td><td>查询结果为空</td><td>无匹配的日志条目</td></tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AerServerMonitor - Login</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #111111;
+            --surface-hover: #1a1a1a;
+            --border: #262626;
+            --text: #f0f0f0;
+            --text-secondary: #a0a0a0;
+            --text-tertiary: #666666;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --danger: #ef4444;
+        }
+        @media (prefers-color-scheme: light) {
+            :root:not([data-theme="dark"]) {
+                --bg: #fafafa;
+                --surface: #ffffff;
+                --surface-hover: #f8f8f8;
+                --border: #e8e8e8;
+                --text: #1a1a1a;
+                --text-secondary: #666666;
+                --text-tertiary: #999999;
+                --accent: #2563eb;
+                --accent-hover: #1d4ed8;
+                --danger: #dc2626;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .login-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 380px;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input:focus {
+            border-color: var(--accent);
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-top: 8px;
+        }
+        button:hover {
+            background: var(--accent-hover);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .error {
+            color: var(--danger);
+            font-size: 0.8rem;
+            margin-top: 12px;
+            text-align: center;
+            display: none;
+        }
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+<div class="theme-toggle" onclick="toggleTheme()" id="themeBtn"></div>
+<div class="login-container">
+    <div class="logo">AerServerMonitor</div>
+    <div class="subtitle">Sign in to dashboard</div>
+    <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="username" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="submitBtn">Sign In</button>
+        <div class="error" id="errorMsg"></div>
+    </form>
+</div>
+<script>
+    const basePath = '';
+
+    function getTheme() {
+        return localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    }
+    function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        document.getElementById('themeBtn').textContent = t === 'dark' ? '\u2600' : '\u263e';
+    }
+    function toggleTheme() {
+        const t = getTheme() === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', t);
+        applyTheme(t);
+    }
+    applyTheme(getTheme());
+
+    async function handleLogin(e) {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        const err = document.getElementById('errorMsg');
+        btn.disabled = true;
+        err.style.display = 'none';
+
+        try {
+            const resp = await fetch(basePath + '/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: document.getElementById('username').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await resp.json();
+            if (data.code === 200 && data.data && data.data.token) {
+                localStorage.setItem('token', data.data.token);
+                if (data.data.need_password_change) {
+                    location.href = '/dashboard/setup.html';
+                } else {
+                    location.href = '/dashboard/';
+                }
+            } else {
+                err.textContent = data.message || 'Login failed';
+                err.style.display = 'block';
+            }
+        } catch (ex) {
+            err.textContent = 'Connection failed';
+            err.style.display = 'block';
+        }
+        btn.disabled = false;
+    }
+
+    // Check existing token
+    (async () => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        try {
+            const resp = await fetch(basePath + '/api/auth/verify', {
+                headers: {'Authorization': 'Bearer ' + token}
+            });
+            const data = await resp.json();
+            if (data.code === 200) {
+                location.href = '/dashboard/';
+            }
+        } catch (e) {}
+    })();
+</script>
+</body>
+</html>
