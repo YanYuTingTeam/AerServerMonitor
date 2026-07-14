@@ -13,6 +13,7 @@ import com.google.gson.JsonObject;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.connection.Server;
+import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.event.*;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.event.EventHandler;
@@ -106,58 +107,43 @@ public class EventListener implements Listener {
 
     @EventHandler
     public void onServerConnect(ServerConnectEvent event) {
-        if (event.getPlayer() != null) {
-            plugin.setPendingConnect(event.getPlayer().getUniqueId().toString(), event);
-        }
-    }
-
-    @EventHandler
-    public void onServerConnected(ServerConnectedEvent event) {
+        if (event.getPlayer() == null) return;
         ProxiedPlayer player = event.getPlayer();
-        long now = TimeUtil.now();
         String uuid = player.getUniqueId().toString();
-        String targetName = event.getServer().getInfo().getName();
-        String targetAddress = event.getServer().getInfo().getAddress().toString();
 
-        ServerConnectEvent pending = plugin.removePendingConnect(uuid);
-        String originName;
-        String originAddress;
-        boolean success;
-
-        if (pending != null) {
-            success = !pending.isCancelled();
-        } else {
-            success = true;
+        // 首次连接到代理端，交给onServerConnected处理
+        if (event.getReason() == ServerConnectEvent.Reason.JOIN_PROXY) {
+            plugin.setPendingConnect(uuid, event);
+            return;
         }
 
-        JsonObject existing = playerDAO.getPlayerByUuid(uuid);
-        if (existing != null && existing.has("current_server") && !existing.get("current_server").isJsonNull()) {
-            String prev = existing.get("current_server").getAsString();
-            if (prev != null && !prev.equals(targetName)) {
-                originName = prev;
-                Server originServer = (Server) ProxyServer.getInstance().getServerInfo(originName);
-                if (originServer != null) {
-                    originAddress = originServer.getAddress().toString();
-                } else {
-                    originAddress = null;
-                }
-            } else {
-                originAddress = null;
-                originName = null;
-            }
-        } else {
-            originAddress = null;
-            originName = null;
-        }
+        // 转服(COMMAND/KICK_REDIRECT/LOBBY_FALLBACK/PLUGIN_MESSAGE/PLUGIN等)
+        long now = TimeUtil.now();
+        String targetName = event.getTarget().getName();
+        String targetAddress = event.getTarget().getAddress().toString();
+        boolean success = !event.isCancelled();
 
         String eventId = LogIdGenerator.generateEventId("playerJoinServer", targetName, uuid);
 
         plugin.getAsyncExecutor().execute(() -> {
-            playerDAO.upsertPlayer(uuid, player.getName(),
-                    player.getAddress().getAddress().getHostAddress(), targetName, true, now);
+            String originName = null;
+            String originAddress = null;
+            JsonObject existing = playerDAO.getPlayerByUuid(uuid);
+            if (existing != null && existing.has("current_server") && !existing.get("current_server").isJsonNull()) {
+                originName = existing.get("current_server").getAsString();
+                if (originName != null) {
+                    ServerInfo originServer = ProxyServer.getInstance().getServerInfo(originName);
+                    if (originServer != null) {
+                        originAddress = originServer.getAddress().toString();
+                    }
+                }
+            }
 
-            String action = originName != null ? originName + " -> " + targetName : "-> " + targetName;
-            logManager.logGame(eventId, targetName, player.getName(), uuid, action);
+            playerDAO.updateServer(uuid, targetName, now);
+
+            String finalOrigin = originName;
+            logManager.logGame(eventId, targetName, player.getName(), uuid,
+                    (finalOrigin != null ? finalOrigin + " -> " : "-> ") + targetName);
 
             JsonObject body = new JsonObject();
             body.addProperty("eventid", eventId);
@@ -171,19 +157,73 @@ public class EventListener implements Listener {
             p.addProperty("ip", player.getAddress().getAddress().getHostAddress());
             body.add("player", p);
 
+            JsonObject server = new JsonObject();
             JsonObject target = new JsonObject();
             target.addProperty("name", targetName);
             target.addProperty("address", targetAddress);
             target.addProperty("describe", "");
-            body.add("target", target);
-
+            server.add("target", target);
             JsonObject origin = new JsonObject();
             origin.addProperty("name", originName);
             origin.addProperty("address", originAddress);
             origin.addProperty("describe", "");
-            body.add("origin", origin);
+            server.add("origin", origin);
+            body.add("server", server);
 
             body.addProperty("success", success);
+
+            postManager.post(EventType.PLAYER_JOIN_SERVER, body.toString());
+            wsSessionManager.offer("playerJoinServer", body);
+        });
+    }
+
+    @EventHandler
+    public void onServerConnected(ServerConnectedEvent event) {
+        ProxiedPlayer player = event.getPlayer();
+        long responseTime = TimeUtil.now();
+        String uuid = player.getUniqueId().toString();
+        String targetName = event.getServer().getInfo().getName();
+        String targetAddress = event.getServer().getInfo().getAddress().toString();
+
+        ServerConnectEvent pending = plugin.removePendingConnect(uuid);
+        if (pending == null) return;
+
+        long time = responseTime;
+
+        String eventId = LogIdGenerator.generateEventId("playerJoinServer", targetName, uuid);
+
+        plugin.getAsyncExecutor().execute(() -> {
+            playerDAO.upsertPlayer(uuid, player.getName(),
+                    player.getAddress().getAddress().getHostAddress(), targetName, true, responseTime);
+
+            logManager.logGame(eventId, targetName, player.getName(), uuid, "-> " + targetName);
+
+            JsonObject body = new JsonObject();
+            body.addProperty("eventid", eventId);
+            body.addProperty("event", "playerJoinServer");
+            body.addProperty("time", time);
+            body.addProperty("responseTime", responseTime);
+
+            JsonObject p = new JsonObject();
+            p.addProperty("name", player.getName());
+            p.addProperty("uuid", uuid);
+            p.addProperty("ip", player.getAddress().getAddress().getHostAddress());
+            body.add("player", p);
+
+            JsonObject server = new JsonObject();
+            JsonObject target = new JsonObject();
+            target.addProperty("name", targetName);
+            target.addProperty("address", targetAddress);
+            target.addProperty("describe", "");
+            server.add("target", target);
+            JsonObject origin = new JsonObject();
+            origin.addProperty("name", (String) null);
+            origin.addProperty("address", (String) null);
+            origin.addProperty("describe", (String) null);
+            server.add("origin", origin);
+            body.add("server", server);
+
+            body.addProperty("success", true);
 
             postManager.post(EventType.PLAYER_JOIN_SERVER, body.toString());
             wsSessionManager.offer("playerJoinServer", body);
