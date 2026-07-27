@@ -109,6 +109,11 @@ options:
   admin-username: "admin"
   admin-password: "AerServerMonitor"
 
+  # 玩家绑定回调地址 (社区后端收到绑定完成通知)
+  bind-callback-url: ""
+  # 绑定验证码提示消息, {code} 会被替换为验证码
+  bind-message: "§f服务器刚刚收到了来自&6Space&f的账号绑定申请. §f你的验证码是: §a{code}§f. 输入 §b/verify {code} §f完成绑定.\n&c&l注意! &r&f如果不是您&e本人操作&f, &c请勿输入该指令对账户进行绑定&f!"
+
 logs:
   print-chat: false
   print-request: false

@@ -12,8 +12,10 @@ import com.aermini.servermonitor.util.ServerInfoUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import com.sun.net.httpserver.HttpExchange;
 import net.md_5.bungee.api.ProxyServer;
+import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 
 public class PlayerHandler {
@@ -22,12 +24,18 @@ public class PlayerHandler {
     private final PlayerDAO playerDAO;
     private final SkinDatabaseManager skinDB;
     private final LogManager logManager;
+    private final PluginConfig config;
+    private final ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds;
 
-    public PlayerHandler(AerServerMonitor plugin, PlayerDAO playerDAO, SkinDatabaseManager skinDB, LogManager logManager) {
+    public PlayerHandler(AerServerMonitor plugin, PlayerDAO playerDAO, SkinDatabaseManager skinDB,
+                         LogManager logManager, PluginConfig config,
+                         ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds) {
         this.plugin = plugin;
         this.playerDAO = playerDAO;
         this.skinDB = skinDB;
         this.logManager = logManager;
+        this.config = config;
+        this.pendingBinds = pendingBinds;
     }
 
     public void handleInfo(HttpExchange exchange) {
@@ -173,6 +181,49 @@ public class PlayerHandler {
         }
 
         JsonObject data = buildPlayerData(player);
+        HttpApiServer.sendWithLog(exchange, 200, ApiResponse.success(logId, data), logManager);
+    }
+
+    public void handleBind(HttpExchange exchange) {
+        String ip = exchange.getRemoteAddress().getAddress().getHostAddress();
+        String logId = LogIdGenerator.generateLogId(ip);
+        String body = (String) exchange.getAttribute("rawBody");
+        if (body == null) body = HttpApiServer.readBody(exchange);
+
+        JsonObject req = com.aermini.servermonitor.util.JsonUtil.parse(body);
+        if (req == null || !req.has("task") || !req.has("name") || !req.has("time")) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "missing task/name/time", logId), logManager);
+            return;
+        }
+
+        String task = req.get("task").getAsString();
+        String playerName = req.get("name").getAsString();
+
+        JsonObject player = findPlayer(null, playerName);
+        if (player == null) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 10002, "player not found", logId), logManager);
+            return;
+        }
+
+        if (!player.get("online").getAsBoolean()) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 10006, "player offline", logId), logManager);
+            return;
+        }
+
+        String uuid = player.get("uuid").getAsString();
+        String code = String.format("%06d", new java.util.Random().nextInt(1000000));
+
+        pendingBinds.put(uuid, new AerServerMonitor.PendingBind(task, playerName, uuid, code));
+
+        ProxiedPlayer pp = ProxyServer.getInstance().getPlayer(java.util.UUID.fromString(uuid));
+        if (pp != null) {
+            String msg = config.getBindMessage().replace("{code}", code);
+            pp.sendMessage(new TextComponent(msg));
+        }
+
+        JsonObject data = new JsonObject();
+        data.addProperty("task", task);
+        data.addProperty("name", playerName);
         HttpApiServer.sendWithLog(exchange, 200, ApiResponse.success(logId, data), logManager);
     }
 

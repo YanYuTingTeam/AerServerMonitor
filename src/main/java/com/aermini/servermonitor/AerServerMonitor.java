@@ -1,6 +1,7 @@
 package com.aermini.servermonitor;
 
 import com.aermini.servermonitor.command.MonitorCommand;
+import com.aermini.servermonitor.command.VerifyCommand;
 import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.DatabaseManager;
 import com.aermini.servermonitor.database.RedisManager;
@@ -22,6 +23,19 @@ import java.util.logging.Logger;
 
 public class AerServerMonitor extends Plugin {
 
+    public static class PendingBind {
+        public final String task;
+        public final String playerName;
+        public final String uuid;
+        public final String code;
+        public PendingBind(String task, String playerName, String uuid, String code) {
+            this.task = task;
+            this.playerName = playerName;
+            this.uuid = uuid;
+            this.code = code;
+        }
+    }
+
     private PluginConfig pluginConfig;
     private DatabaseManager databaseManager;
     private RedisManager redisManager;
@@ -40,6 +54,7 @@ public class AerServerMonitor extends Plugin {
     private BlockingQueue<Object[]> chatBuffer;
 
     private final ConcurrentHashMap<String, ServerConnectEvent> pendingConnects = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, PendingBind> pendingBinds = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -90,7 +105,7 @@ public class AerServerMonitor extends Plugin {
             wsServer.start();
             wsSessionManager = new WsSessionManager(wsServer, logger, 100);
 
-            PlayerHandler playerHandler = new PlayerHandler(this, playerDAO, skinDB, logManager);
+            PlayerHandler playerHandler = new PlayerHandler(this, playerDAO, skinDB, logManager, pluginConfig, pendingBinds);
             ServerHandler serverHandler = new ServerHandler(this, playerDAO, skinDB, logManager,
                     new com.aermini.servermonitor.http.middleware.WhitelistMiddleware(pluginConfig));
             ChatHandler chatHandler = new ChatHandler(this, chatDAO, logManager);
@@ -113,6 +128,7 @@ public class AerServerMonitor extends Plugin {
             getProxy().getPluginManager().registerListener(this, new com.aermini.servermonitor.channel.ChannelHandler(this, playerDAO, chatDAO, wsSessionManager, postManager));
 
             getProxy().getPluginManager().registerCommand(this, new MonitorCommand(this));
+            getProxy().getPluginManager().registerCommand(this, new VerifyCommand(this, pluginConfig, playerDAO, skinDB, pendingBinds, logger));
 
             logger.info("v1.0 loaded.");
             logger.info("HTTP: " + pluginConfig.getHttpPort() + " | WS: " + pluginConfig.getWsPort() + " | Dashboard: http://localhost:" + pluginConfig.getHttpPort() + pluginConfig.getDashboardPath());

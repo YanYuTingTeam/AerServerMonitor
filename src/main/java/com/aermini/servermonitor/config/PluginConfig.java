@@ -139,6 +139,9 @@ public class PluginConfig {
     public String getAdminUsername() { return config.getString("options.admin-username", "admin"); }
     public String getAdminPassword() { return config.getString("options.admin-password", "AerServerMonitor"); }
 
+    public String getBindCallbackUrl() { return config.getString("options.bind-callback-url", ""); }
+    public String getBindMessage() { return config.getString("options.bind-message", "§f服务器刚刚收到了来自&6Space&f的账号绑定申请. §f你的验证码是: §a{code}§f. 输入 §b/verify {code} §f完成绑定.\n&c&l注意! &r&f如果不是您&e本人操作&f, &c请勿输入该指令对账户进行绑定&f!"); }
+
     public boolean isPrintChat() { return config.getBoolean("logs.print-chat", false); }
     public boolean isPrintRequest() { return config.getBoolean("logs.print-request", false); }
     public int getLogRetentionDays() { return config.getInt("logs.file-retention-days", 30); }
