@@ -33,7 +33,7 @@ public class PlayerDAO {
     }
 
     public JsonObject getPlayerByName(String name) {
-        String sql = "SELECT * FROM " + db.prefix() + "players WHERE name = ?";
+        String sql = "SELECT * FROM " + db.prefix() + "players WHERE name = ? ORDER BY online DESC, update_time DESC LIMIT 1";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, name);
             ResultSet rs = ps.executeQuery();
