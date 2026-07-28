@@ -34,6 +34,10 @@ public class ServerHandler {
         Thread t = new Thread(r, "AerMonitor-SLP"); t.setDaemon(true); return t;
     });
 
+    public void shutdown() {
+        pingPool.shutdownNow();
+    }
+
     public ServerHandler(AerServerMonitor plugin, PlayerDAO playerDAO, SkinDatabaseManager skinDB, LogManager logManager, WhitelistMiddleware ssrfCheck) {
         this.plugin = plugin;
         this.playerDAO = playerDAO;

@@ -26,6 +26,7 @@ public class HttpApiServer {
     private final LogManager logManager;
     private final Logger logger;
     private HttpServer server;
+    private java.util.concurrent.ExecutorService httpExecutor;
     private final AuthMiddleware authMiddleware;
     private final RateLimitMiddleware rateLimitMiddleware;
     private final WhitelistMiddleware whitelistMiddleware;
@@ -67,11 +68,12 @@ public class HttpApiServer {
 
     public void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress(config.getHttpPort()), 0);
-        server.setExecutor(Executors.newFixedThreadPool(8, r -> {
+        httpExecutor = Executors.newFixedThreadPool(8, r -> {
             Thread t = new Thread(r, "AerMonitor-HTTP");
             t.setDaemon(true);
             return t;
-        }));
+        });
+        server.setExecutor(httpExecutor);
 
         server.createContext("/player/info", this::handlePlayerInfo);
         server.createContext("/player/list", this::handlePlayerList);
@@ -116,6 +118,7 @@ public class HttpApiServer {
         if (server != null) {
             server.stop(0);
         }
+        if (httpExecutor != null) httpExecutor.shutdownNow();
     }
 
     private void handlePlayerInfo(HttpExchange exchange) {

@@ -18,6 +18,7 @@ public class LogManager {
     private BufferedWriter writer;
     private String currentDate;
     private final File logDir;
+    private Thread cleanupThread;
 
     public LogManager(PluginConfig config, Logger logger) {
         this.config = config;
@@ -45,7 +46,7 @@ public class LogManager {
         flushThread.setDaemon(true);
         flushThread.start();
 
-        Thread cleanupThread = new Thread(() -> {
+        cleanupThread = new Thread(() -> {
             while (running) {
                 try {
                     Thread.sleep(3600000);
@@ -62,6 +63,7 @@ public class LogManager {
 
     public void stop() {
         running = false;
+        if (cleanupThread != null) cleanupThread.interrupt();
         flush();
         closeWriter();
     }

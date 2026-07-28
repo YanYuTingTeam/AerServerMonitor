@@ -69,9 +69,10 @@ public class WebSocketServer {
     public void stop() {
         sessions.forEach(Channel::close);
         sessions.clear();
-        if (serverChannel != null) serverChannel.close();
-        if (bossGroup != null) bossGroup.shutdownGracefully();
-        if (workerGroup != null) workerGroup.shutdownGracefully();
+        // 热重载需要同步等端口释放, 否则新实例bind会撞Address already in use
+        if (serverChannel != null) serverChannel.close().syncUninterruptibly();
+        if (bossGroup != null) bossGroup.shutdownGracefully(0, 2, java.util.concurrent.TimeUnit.SECONDS).syncUninterruptibly();
+        if (workerGroup != null) workerGroup.shutdownGracefully(0, 2, java.util.concurrent.TimeUnit.SECONDS).syncUninterruptibly();
     }
 
     public void broadcast(String event, JsonObject data) {

@@ -16,6 +16,7 @@ public class RedisManager {
     private volatile boolean available = false;
     private volatile boolean degraded = false;
     private int consecutiveFailures = 0;
+    private Thread healthCheck;
 
     public RedisManager(PluginConfig config, Logger logger) {
         this.config = config;
@@ -55,7 +56,7 @@ public class RedisManager {
             e.printStackTrace();
         }
 
-        Thread healthCheck = new Thread(() -> {
+        healthCheck = new Thread(() -> {
             while (true) {
                 try {
                     Thread.sleep(config.getRedisHealthCheckInterval());
@@ -71,6 +72,7 @@ public class RedisManager {
     }
 
     public void shutdown() {
+        if (healthCheck != null) healthCheck.interrupt();
         if (pool != null && !pool.isClosed()) {
             pool.close();
         }

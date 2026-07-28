@@ -53,6 +53,8 @@ public class AerServerMonitor extends Plugin {
     private WsSessionManager wsSessionManager;
     private ExecutorService asyncExecutor;
     private BlockingQueue<Object[]> chatBuffer;
+    private Thread chatFlusher;
+    private ServerHandler serverHandler;
 
     private final ConcurrentHashMap<String, ServerConnectEvent> pendingConnects = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PendingBind> pendingBinds = new ConcurrentHashMap<>();
@@ -120,7 +122,7 @@ public class AerServerMonitor extends Plugin {
             wsSessionManager = new WsSessionManager(wsServer, logger, 100);
 
             PlayerHandler playerHandler = new PlayerHandler(this, playerDAO, skinDB, logManager, pluginConfig, pendingBinds);
-            ServerHandler serverHandler = new ServerHandler(this, playerDAO, skinDB, logManager,
+            serverHandler = new ServerHandler(this, playerDAO, skinDB, logManager,
                     new com.aermini.servermonitor.http.middleware.WhitelistMiddleware(pluginConfig));
             ChatHandler chatHandler = new ChatHandler(this, chatDAO, logManager);
             SystemHandler systemHandler = new SystemHandler(logManager, redisManager, databaseManager);
@@ -160,9 +162,12 @@ public class AerServerMonitor extends Plugin {
 
     @Override
     public void onDisable() {
+        getProxy().unregisterChannel("aermonitor:main");
+        if (chatFlusher != null) chatFlusher.interrupt();
         if (postManager != null) postManager.shutdown();
         if (wsSessionManager != null) wsSessionManager.shutdown();
         if (httpServer != null) httpServer.stop();
+        if (serverHandler != null) serverHandler.shutdown();
         if (wsServer != null) wsServer.stop();
         if (logManager != null) logManager.stop();
         if (skinDB != null) skinDB.shutdown();
@@ -198,7 +203,7 @@ public class AerServerMonitor extends Plugin {
     }
 
     private void startChatBatchFlusher() {
-        Thread flusher = new Thread(() -> {
+        chatFlusher = new Thread(() -> {
             while (true) {
                 try {
                     Thread.sleep(pluginConfig.getAsyncChatBatchInterval());
@@ -215,7 +220,7 @@ public class AerServerMonitor extends Plugin {
                 }
             }
         }, "AerMonitor-ChatFlush");
-        flusher.setDaemon(true);
-        flusher.start();
+        chatFlusher.setDaemon(true);
+        chatFlusher.start();
     }
 }
