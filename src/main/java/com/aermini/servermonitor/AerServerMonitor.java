@@ -40,6 +40,7 @@ public class AerServerMonitor extends Plugin {
     private DatabaseManager databaseManager;
     private RedisManager redisManager;
     private SkinDatabaseManager skinDB;
+    private FastLoginDatabaseManager fastLoginDB;
     private LogManager logManager;
     private PlayerDAO playerDAO;
     private ChatDAO chatDAO;
@@ -84,6 +85,9 @@ public class AerServerMonitor extends Plugin {
 
             skinDB = new SkinDatabaseManager(pluginConfig, logger, databaseManager);
             skinDB.init();
+
+            fastLoginDB = new FastLoginDatabaseManager(pluginConfig, logger, databaseManager);
+            fastLoginDB.init();
 
             playerDAO = new PlayerDAO(databaseManager, redisManager);
 
@@ -138,7 +142,7 @@ public class AerServerMonitor extends Plugin {
             getProxy().getPluginManager().registerListener(this, new com.aermini.servermonitor.channel.ChannelHandler(this, playerDAO, chatDAO, wsSessionManager, postManager));
 
             getProxy().getPluginManager().registerCommand(this, new MonitorCommand(this));
-            getProxy().getPluginManager().registerCommand(this, new VerifyCommand(this, pluginConfig, playerDAO, skinDB, pendingBinds, logger));
+            getProxy().getPluginManager().registerCommand(this, new VerifyCommand(this, pluginConfig, playerDAO, skinDB, fastLoginDB, pendingBinds, logger));
 
             logger.info("v1.0 loaded.");
             logger.info("HTTP: " + pluginConfig.getHttpPort() + " | WS: " + pluginConfig.getWsPort() + " | Dashboard: http://localhost:" + pluginConfig.getHttpPort() + pluginConfig.getDashboardPath());
@@ -162,6 +166,7 @@ public class AerServerMonitor extends Plugin {
         if (wsServer != null) wsServer.stop();
         if (logManager != null) logManager.stop();
         if (skinDB != null) skinDB.shutdown();
+        if (fastLoginDB != null) fastLoginDB.shutdown();
         if (redisManager != null) redisManager.shutdown();
         if (databaseManager != null) databaseManager.shutdown();
         if (asyncExecutor != null) asyncExecutor.shutdown();

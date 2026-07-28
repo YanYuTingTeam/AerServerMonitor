@@ -23,6 +23,16 @@ database:
     pool:
       maximum-pool-size: 5
       minimum-idle: 1
+  fastlogin:
+    type: mysql
+    address: "localhost:3306"
+    username: ""
+    password: ""
+    database: ""
+    table: premium
+    pool:
+      maximum-pool-size: 5
+      minimum-idle: 1
 
 redis:
   host: "127.0.0.1"

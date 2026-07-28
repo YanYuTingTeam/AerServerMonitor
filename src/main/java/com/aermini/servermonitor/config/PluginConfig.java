@@ -54,6 +54,15 @@ public class PluginConfig {
     public String getSkinTable() { return config.getString("database.skin.table", "skinr_players"); }
     public int getSkinPoolMaxSize() { return config.getInt("database.skin.pool.maximum-pool-size", 5); }
     public int getSkinPoolMinIdle() { return config.getInt("database.skin.pool.minimum-idle", 1); }
+    
+    public String getFastLoginDbType() { return config.getString("database.fastlogin.type", "mysql"); }
+    public String getFastLoginDbAddress() { return config.getString("database.fastlogin.address", "localhost:3306"); }
+    public String getFastLoginDbUsername() { return config.getString("database.fastlogin.username", ""); }
+    public String getFastLoginDbPassword() { return config.getString("database.fastlogin.password", ""); }
+    public String getFastLoginDbName() { return config.getString("database.fastlogin.database", ""); }
+    public String getFastLoginTable() { return config.getString("database.fastlogin.table", "premium"); }
+    public int getFastLoginPoolMaxSize() { return config.getInt("database.fastlogin.pool.maximum-pool-size", 5); }
+    public int getFastLoginPoolMinIdle() { return config.getInt("database.fastlogin.pool.minimum-idle", 1); }
 
     public String getRedisHost() { return config.getString("redis.host", "127.0.0.1"); }
     public int getRedisPort() { return config.getInt("redis.port", 6379); }

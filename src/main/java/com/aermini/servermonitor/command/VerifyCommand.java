@@ -2,6 +2,7 @@ package com.aermini.servermonitor.command;
 
 import com.aermini.servermonitor.AerServerMonitor;
 import com.aermini.servermonitor.config.PluginConfig;
+import com.aermini.servermonitor.database.dao.FastLoginDatabaseManager;
 import com.aermini.servermonitor.database.dao.PlayerDAO;
 import com.aermini.servermonitor.database.dao.SkinDatabaseManager;
 import com.google.gson.JsonObject;
@@ -24,17 +25,19 @@ public class VerifyCommand extends Command {
     private final PluginConfig config;
     private final PlayerDAO playerDAO;
     private final SkinDatabaseManager skinDB;
+    private final FastLoginDatabaseManager fastLoginDB;
     private final ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds;
     private final Logger logger;
 
     public VerifyCommand(AerServerMonitor plugin, PluginConfig config, PlayerDAO playerDAO,
-                         SkinDatabaseManager skinDB,
+                         SkinDatabaseManager skinDB, FastLoginDatabaseManager fastLoginDB,
                          ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds, Logger logger) {
         super("verify");
         this.plugin = plugin;
         this.config = config;
         this.playerDAO = playerDAO;
         this.skinDB = skinDB;
+        this.fastLoginDB = fastLoginDB;
         this.pendingBinds = pendingBinds;
         this.logger = logger;
     }
@@ -59,10 +62,16 @@ public class VerifyCommand extends Command {
         pendingBinds.remove(uuid);
         String skin = skinDB.getSkinUuid(uuid);
         String playerIp = player.getAddress() != null ? player.getAddress().getHostString() : "";
+        // offline_uuid由名字推导, premium_uuid查FastLogin的premium表, 给网站做身份归一
+        String offlineUuid = java.util.UUID.nameUUIDFromBytes(
+                ("OfflinePlayer:" + bind.playerName).getBytes(StandardCharsets.UTF_8)).toString();
+        String premiumUuid = fastLoginDB.getPremiumUuid(bind.playerName);
         JsonObject body = new JsonObject();
         body.addProperty("task", bind.task);
         body.addProperty("name", bind.playerName);
         body.addProperty("uuid", uuid);
+        body.addProperty("offline_uuid", offlineUuid);
+        body.addProperty("premium_uuid", premiumUuid != null ? premiumUuid : "");
         body.addProperty("ip", playerIp);
         body.addProperty("skin", skin != null ? skin : "");
         String callbackUrl = config.getBindCallbackUrl();
