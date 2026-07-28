@@ -199,31 +199,29 @@ public class PlayerHandler {
         String task = req.get("task").getAsString();
         String playerName = req.get("name").getAsString();
 
-        JsonObject player = findPlayer(null, playerName);
-        if (player == null) {
-            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 10002, "player not found", logId), logManager);
+        // 绑定只认代理实时在线的人, 避免库里旧uuid脏数据误判
+        ProxiedPlayer pp = ProxyServer.getInstance().getPlayer(playerName);
+        if (pp == null) {
+            JsonObject player = findPlayer(null, playerName);
+            if (player == null) {
+                HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 10002, "player not found", logId), logManager);
+            } else {
+                HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 10006, "player offline", logId), logManager);
+            }
             return;
         }
 
-        if (!player.get("online").getAsBoolean()) {
-            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 10006, "player offline", logId), logManager);
-            return;
-        }
-
-        String uuid = player.get("uuid").getAsString();
+        String uuid = pp.getUniqueId().toString();
         String code = String.format("%06d", new java.util.Random().nextInt(1000000));
 
-        pendingBinds.put(uuid, new AerServerMonitor.PendingBind(task, playerName, uuid, code));
+        pendingBinds.put(uuid, new AerServerMonitor.PendingBind(task, pp.getName(), uuid, code));
 
-        ProxiedPlayer pp = ProxyServer.getInstance().getPlayer(java.util.UUID.fromString(uuid));
-        if (pp != null) {
-            String msg = config.getBindMessage().replace("{code}", code);
-            pp.sendMessage(new TextComponent(msg));
-        }
+        String msg = config.getBindMessage().replace("{code}", code);
+        pp.sendMessage(new TextComponent(msg));
 
         JsonObject data = new JsonObject();
         data.addProperty("task", task);
-        data.addProperty("name", playerName);
+        data.addProperty("name", pp.getName());
         HttpApiServer.sendWithLog(exchange, 200, ApiResponse.success(logId, data), logManager);
     }
 

@@ -86,6 +86,16 @@ public class AerServerMonitor extends Plugin {
             skinDB.init();
 
             playerDAO = new PlayerDAO(databaseManager, redisManager);
+
+            // 启动时清掉崩溃残留的在线状态, 再把当前真实在线的补回去
+            playerDAO.resetAllOnline();
+            for (net.md_5.bungee.api.connection.ProxiedPlayer p : getProxy().getPlayers()) {
+                playerDAO.upsertPlayer(p.getUniqueId().toString(), p.getName(),
+                        p.getAddress().getAddress().getHostAddress(),
+                        p.getServer() != null ? p.getServer().getInfo().getName() : null,
+                        true, com.aermini.servermonitor.util.TimeUtil.now());
+            }
+
             chatDAO = new ChatDAO(databaseManager);
             chatDAO.setSkinDatabaseManager(skinDB);
             cmdLogDAO = new CmdLogDAO(databaseManager);

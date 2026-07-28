@@ -85,6 +85,13 @@ public class PlayerDAO {
         } catch (SQLException ignored) {}
     }
 
+    public void resetAllOnline() {
+        String sql = "UPDATE " + db.prefix() + "players SET online = FALSE WHERE online = TRUE";
+        try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.executeUpdate();
+        } catch (SQLException ignored) {}
+    }
+
     public void updateServer(String uuid, String server, long now) {
         String sql = "UPDATE " + db.prefix() + "players SET current_server = ?, ljoin_time = ?, update_time = ? WHERE uuid = ?";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
