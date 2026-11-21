@@ -42,7 +42,7 @@ public class FastLoginDatabaseManager {
                 String path = config.getFastLoginDbAddress();
                 if (path.isEmpty()) path = new File(config.getDataFolder(), "fastlogin.db").getAbsolutePath();
                 hikari.setJdbcUrl("jdbc:h2:" + path + ";AUTO_SERVER=TRUE;MODE=MySQL");
-                hikari.setDriverClassName("org.h2.Driver");
+                hikari.setDriverClassName(org.h2.Driver.class.getName());
             } else {
                 hikari.setJdbcUrl("jdbc:mysql://" + config.getFastLoginDbAddress() + "/" + config.getFastLoginDbName()
                         + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC");

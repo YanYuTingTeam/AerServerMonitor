@@ -6,6 +6,7 @@ import com.aermini.servermonitor.log.LogManager;
 import com.aermini.servermonitor.database.dao.PlayerDAO;
 import com.aermini.servermonitor.database.dao.ChatDAO;
 import com.aermini.servermonitor.database.dao.CmdLogDAO;
+import com.aermini.servermonitor.database.redis.ChatQueue;
 import com.aermini.servermonitor.http.ws.WsSessionManager;
 import com.aermini.servermonitor.post.PostManager;
 import com.aermini.servermonitor.util.TimeUtil;
@@ -18,9 +19,6 @@ import net.md_5.bungee.api.event.*;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.event.EventHandler;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-
 public class EventListener implements Listener {
 
     private final AerServerMonitor plugin;
@@ -30,11 +28,11 @@ public class EventListener implements Listener {
     private final CmdLogDAO cmdLogDAO;
     private final PostManager postManager;
     private final WsSessionManager wsSessionManager;
-    private final BlockingQueue<Object[]> chatBuffer;
+    private final ChatQueue chatQueue;
 
     public EventListener(AerServerMonitor plugin, LogManager logManager, PlayerDAO playerDAO,
                          ChatDAO chatDAO, CmdLogDAO cmdLogDAO, PostManager postManager,
-                         WsSessionManager wsSessionManager, BlockingQueue<Object[]> chatBuffer) {
+                         WsSessionManager wsSessionManager, ChatQueue chatQueue) {
         this.plugin = plugin;
         this.logManager = logManager;
         this.playerDAO = playerDAO;
@@ -42,7 +40,7 @@ public class EventListener implements Listener {
         this.cmdLogDAO = cmdLogDAO;
         this.postManager = postManager;
         this.wsSessionManager = wsSessionManager;
-        this.chatBuffer = chatBuffer;
+        this.chatQueue = chatQueue;
     }
 
     @EventHandler
@@ -254,11 +252,9 @@ public class EventListener implements Listener {
         String msgId = LogIdGenerator.generateMsgId(message);
         String eventId = LogIdGenerator.generateEventId("playerChat", serverName, uuid);
 
-        chatBuffer.offer(new Object[]{
-                player.getName(), uuid,
+        chatQueue.offer(player.getName(), uuid,
                 player.getAddress().getAddress().getHostAddress(),
-                serverName, now, msgId, message
-        });
+                serverName, now, msgId, message);
 
         logManager.logChat(msgId, eventId, serverName, player.getName(), uuid, message);
 

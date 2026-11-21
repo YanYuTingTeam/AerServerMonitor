@@ -5,8 +5,8 @@ import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.dao.FastLoginDatabaseManager;
 import com.aermini.servermonitor.database.dao.PlayerDAO;
 import com.aermini.servermonitor.database.dao.SkinDatabaseManager;
+import com.aermini.servermonitor.database.redis.BindStore;
 import com.google.gson.JsonObject;
-import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
@@ -16,7 +16,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class VerifyCommand extends Command {
@@ -26,40 +25,44 @@ public class VerifyCommand extends Command {
     private final PlayerDAO playerDAO;
     private final SkinDatabaseManager skinDB;
     private final FastLoginDatabaseManager fastLoginDB;
-    private final ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds;
+    private final BindStore bindStore;
     private final Logger logger;
 
     public VerifyCommand(AerServerMonitor plugin, PluginConfig config, PlayerDAO playerDAO,
                          SkinDatabaseManager skinDB, FastLoginDatabaseManager fastLoginDB,
-                         ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds, Logger logger) {
+                         BindStore bindStore, Logger logger) {
         super("verify");
         this.plugin = plugin;
         this.config = config;
         this.playerDAO = playerDAO;
         this.skinDB = skinDB;
         this.fastLoginDB = fastLoginDB;
-        this.pendingBinds = pendingBinds;
+        this.bindStore = bindStore;
         this.logger = logger;
     }
 
     @Override
     public void execute(CommandSender sender, String[] args) {
         if (args.length < 1) {
-            sender.sendMessage(new TextComponent("§7正确的用法是 §b/verify §f<验证码> §7. 请留意你输入的内容"));
+            sender.sendMessage(new TextComponent(plugin.getMessages().verifyUsage()));
+            return;
+        }
+        if (!(sender instanceof ProxiedPlayer)) {
+            sender.sendMessage(new TextComponent(plugin.getMessages().verifyConsoleOnly()));
             return;
         }
         ProxiedPlayer player = (ProxiedPlayer) sender;
         String uuid = player.getUniqueId().toString();
-        AerServerMonitor.PendingBind bind = pendingBinds.get(uuid);
+        AerServerMonitor.PendingBind bind = bindStore.get(uuid);
         if (bind == null) {
-            sender.sendMessage(new TextComponent("§7你还没有待验证的绑定请求, 无法使用该命令"));
+            sender.sendMessage(new TextComponent(plugin.getMessages().verifyNoPending()));
             return;
         }
-        if (!args[0].equals(bind.code)) {
-            sender.sendMessage(new TextComponent("§c验证码错误"));
+        bind = bindStore.verifyAndRemove(uuid, args[0]);
+        if (bind == null) {
+            sender.sendMessage(new TextComponent(plugin.getMessages().verifyWrongCode()));
             return;
         }
-        pendingBinds.remove(uuid);
         String skin = skinDB.getSkinUuid(uuid);
         String playerIp = player.getAddress() != null ? player.getAddress().getHostString() : "";
         // offline_uuid由名字推导, premium_uuid查FastLogin的premium表, 给网站做身份归一
@@ -76,7 +79,7 @@ public class VerifyCommand extends Command {
         body.addProperty("skin", skin != null ? skin : "");
         String callbackUrl = config.getBindCallbackUrl();
         if (callbackUrl == null || callbackUrl.isEmpty()) {
-            sender.sendMessage(new TextComponent("§7绑定回调未配置, 请联系管理员"));
+            sender.sendMessage(new TextComponent(plugin.getMessages().verifyCallbackMissing()));
             return;
         }
         try {
@@ -94,13 +97,13 @@ public class VerifyCommand extends Command {
             conn.disconnect();
 
             if (status >= 200 && status < 300) {
-                sender.sendMessage(new TextComponent("§f恭喜你 &b"+bind.playerName+"&f, 你已成功绑定你的&6Space&f账号"));
+                sender.sendMessage(new TextComponent(plugin.getMessages().verifySuccess().replace("{player}", bind.playerName)));
             } else {
-                sender.sendMessage(new TextComponent("&f绑定失败 &7(&b" + status + "&7)"));
+                sender.sendMessage(new TextComponent(plugin.getMessages().verifyFailStatus().replace("{status}", String.valueOf(status))));
             }
         } catch (Exception e) {
             logger.warning("[Bind] callback error: " + e.getMessage());
-            sender.sendMessage(new TextComponent("&c绑定失败, 请稍后重试"));
+            sender.sendMessage(new TextComponent(plugin.getMessages().verifyFailError()));
         }
     }
 }

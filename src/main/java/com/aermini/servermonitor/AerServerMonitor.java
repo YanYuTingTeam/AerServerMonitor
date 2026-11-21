@@ -1,17 +1,25 @@
 package com.aermini.servermonitor;
 
+import com.aermini.servermonitor.command.IrcChatCommand;
+import com.aermini.servermonitor.command.IrcToggleCommand;
 import com.aermini.servermonitor.command.MonitorCommand;
 import com.aermini.servermonitor.command.VerifyCommand;
+import com.aermini.servermonitor.config.MessageManager;
 import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.DatabaseManager;
 import com.aermini.servermonitor.database.RedisManager;
 import com.aermini.servermonitor.database.dao.SkinDatabaseManager;
 import com.aermini.servermonitor.database.dao.*;
+import com.aermini.servermonitor.database.redis.BindStore;
+import com.aermini.servermonitor.database.redis.ChatQueue;
+import com.aermini.servermonitor.database.redis.LoginGuard;
+import com.aermini.servermonitor.database.redis.PresenceStore;
 import com.aermini.servermonitor.event.EventListener;
 import com.aermini.servermonitor.http.HttpApiServer;
 import com.aermini.servermonitor.http.handler.*;
 import com.aermini.servermonitor.http.ws.WebSocketServer;
 import com.aermini.servermonitor.http.ws.WsSessionManager;
+import com.aermini.servermonitor.irc.IrcManager;
 import com.aermini.servermonitor.log.LogManager;
 import com.aermini.servermonitor.post.PostManager;
 import net.md_5.bungee.api.event.ServerConnectEvent;
@@ -37,6 +45,7 @@ public class AerServerMonitor extends Plugin {
     }
 
     private PluginConfig pluginConfig;
+    private MessageManager messageManager;
     private DatabaseManager databaseManager;
     private RedisManager redisManager;
     private SkinDatabaseManager skinDB;
@@ -52,12 +61,14 @@ public class AerServerMonitor extends Plugin {
     private WebSocketServer wsServer;
     private WsSessionManager wsSessionManager;
     private ExecutorService asyncExecutor;
-    private BlockingQueue<Object[]> chatBuffer;
-    private Thread chatFlusher;
+    private ChatQueue chatQueue;
     private ServerHandler serverHandler;
+    private IrcManager ircManager;
 
     private final ConcurrentHashMap<String, ServerConnectEvent> pendingConnects = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, PendingBind> pendingBinds = new ConcurrentHashMap<>();
+    private LoginGuard loginGuard;
+    private BindStore bindStore;
+    private PresenceStore presenceStore;
 
     @Override
     public void onEnable() {
@@ -66,6 +77,9 @@ public class AerServerMonitor extends Plugin {
         try {
             pluginConfig = new PluginConfig(getDataFolder());
             pluginConfig.load();
+
+            messageManager = new MessageManager(getDataFolder(), logger);
+            messageManager.load();
 
             asyncExecutor = new ThreadPoolExecutor(
                     pluginConfig.getAsyncEventPoolSize(),
@@ -85,16 +99,21 @@ public class AerServerMonitor extends Plugin {
             redisManager = new RedisManager(pluginConfig, logger);
             redisManager.init();
 
-            skinDB = new SkinDatabaseManager(pluginConfig, logger, databaseManager);
+            skinDB = new SkinDatabaseManager(pluginConfig, logger, databaseManager, redisManager);
             skinDB.init();
 
             fastLoginDB = new FastLoginDatabaseManager(pluginConfig, logger, databaseManager);
             fastLoginDB.init();
 
-            playerDAO = new PlayerDAO(databaseManager, redisManager);
+            presenceStore = new PresenceStore(pluginConfig, redisManager, logger);
+            presenceStore.start();
+
+            playerDAO = new PlayerDAO(databaseManager, redisManager, presenceStore);
 
             // 启动时清掉崩溃残留的在线状态, 再把当前真实在线的补回去
-            playerDAO.resetAllOnline();
+            if (!pluginConfig.isRedisFeatureEnabled("presence")) {
+                playerDAO.resetAllOnline();
+            }
             for (net.md_5.bungee.api.connection.ProxiedPlayer p : getProxy().getPlayers()) {
                 playerDAO.upsertPlayer(p.getUniqueId().toString(), p.getName(),
                         p.getAddress().getAddress().getHostAddress(),
@@ -110,18 +129,21 @@ public class AerServerMonitor extends Plugin {
 
             adminDAO.ensureDefaultAdmin(pluginConfig.getAdminUsername(), pluginConfig.getAdminPassword());
 
-            postManager = new PostManager(pluginConfig, webhookLogDAO, logManager, logger);
+            loginGuard = new LoginGuard(pluginConfig, redisManager, logger);
+            bindStore = new BindStore(pluginConfig, redisManager, logger);
+            postManager = new PostManager(pluginConfig, webhookLogDAO, logManager, logger, redisManager);
+            postManager.start();
 
-            chatBuffer = new LinkedBlockingQueue<>(10000);
-            startChatBatchFlusher();
+            chatQueue = new ChatQueue(pluginConfig, redisManager, chatDAO, logger);
+            chatQueue.start();
 
-            AuthHandler authHandler = new AuthHandler(pluginConfig, adminDAO, logManager);
+            AuthHandler authHandler = new AuthHandler(pluginConfig, adminDAO, logManager, loginGuard);
 
             wsServer = new WebSocketServer(pluginConfig, authHandler, logger);
             wsServer.start();
             wsSessionManager = new WsSessionManager(wsServer, logger, 100);
 
-            PlayerHandler playerHandler = new PlayerHandler(this, playerDAO, skinDB, logManager, pluginConfig, pendingBinds);
+            PlayerHandler playerHandler = new PlayerHandler(this, playerDAO, skinDB, logManager, pluginConfig, bindStore);
             serverHandler = new ServerHandler(this, playerDAO, skinDB, logManager,
                     new com.aermini.servermonitor.http.middleware.WhitelistMiddleware(pluginConfig));
             ChatHandler chatHandler = new ChatHandler(this, chatDAO, logManager);
@@ -137,14 +159,19 @@ public class AerServerMonitor extends Plugin {
             httpServer.start();
 
             EventListener eventListener = new EventListener(this, logManager, playerDAO, chatDAO,
-                    cmdLogDAO, postManager, wsSessionManager, chatBuffer);
+                    cmdLogDAO, postManager, wsSessionManager, chatQueue);
             getProxy().getPluginManager().registerListener(this, eventListener);
 
             getProxy().registerChannel("aermonitor:main");
             getProxy().getPluginManager().registerListener(this, new com.aermini.servermonitor.channel.ChannelHandler(this, playerDAO, chatDAO, wsSessionManager, postManager));
 
             getProxy().getPluginManager().registerCommand(this, new MonitorCommand(this));
-            getProxy().getPluginManager().registerCommand(this, new VerifyCommand(this, pluginConfig, playerDAO, skinDB, fastLoginDB, pendingBinds, logger));
+            getProxy().getPluginManager().registerCommand(this, new VerifyCommand(this, pluginConfig, playerDAO, skinDB, fastLoginDB, bindStore, logger));
+
+            ircManager = new IrcManager(messageManager);
+            getProxy().getPluginManager().registerCommand(this, new IrcChatCommand(ircManager, messageManager));
+            getProxy().getPluginManager().registerCommand(this, new IrcToggleCommand(ircManager, messageManager, true));
+            getProxy().getPluginManager().registerCommand(this, new IrcToggleCommand(ircManager, messageManager, false));
 
             logger.info("v1.0 loaded.");
             logger.info("HTTP: " + pluginConfig.getHttpPort() + " | WS: " + pluginConfig.getWsPort() + " | Dashboard: http://localhost:" + pluginConfig.getHttpPort() + pluginConfig.getDashboardPath());
@@ -163,8 +190,9 @@ public class AerServerMonitor extends Plugin {
     @Override
     public void onDisable() {
         getProxy().unregisterChannel("aermonitor:main");
-        if (chatFlusher != null) chatFlusher.interrupt();
+        if (chatQueue != null) chatQueue.shutdown();
         if (postManager != null) postManager.shutdown();
+        if (presenceStore != null) presenceStore.shutdown();
         if (wsSessionManager != null) wsSessionManager.shutdown();
         if (httpServer != null) httpServer.stop();
         if (serverHandler != null) serverHandler.shutdown();
@@ -179,11 +207,15 @@ public class AerServerMonitor extends Plugin {
 
     public void reloadPluginConfig() throws Exception {
         pluginConfig.reload();
-
+        messageManager.load();
     }
 
     public PluginConfig getConfig() {
         return pluginConfig;
+    }
+
+    public MessageManager getMessages() {
+        return messageManager;
     }
 
     public RedisManager getRedisManager() {
@@ -200,27 +232,5 @@ public class AerServerMonitor extends Plugin {
 
     public ServerConnectEvent removePendingConnect(String uuid) {
         return pendingConnects.remove(uuid);
-    }
-
-    private void startChatBatchFlusher() {
-        chatFlusher = new Thread(() -> {
-            while (true) {
-                try {
-                    Thread.sleep(pluginConfig.getAsyncChatBatchInterval());
-                    java.util.List<Object[]> batch = new java.util.ArrayList<>();
-                    chatBuffer.drainTo(batch, pluginConfig.getAsyncChatBatchSize());
-                    if (!batch.isEmpty()) {
-                        chatDAO.insertChatBatch(batch);
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                } catch (Exception e) {
-                    getLogger().warning("Chat batch flush error: " + e.getMessage());
-                }
-            }
-        }, "AerMonitor-ChatFlush");
-        chatFlusher.setDaemon(true);
-        chatFlusher.start();
     }
 }

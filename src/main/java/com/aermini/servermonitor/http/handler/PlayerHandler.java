@@ -4,6 +4,7 @@ import com.aermini.servermonitor.AerServerMonitor;
 import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.dao.PlayerDAO;
 import com.aermini.servermonitor.database.dao.SkinDatabaseManager;
+import com.aermini.servermonitor.database.redis.BindStore;
 import com.aermini.servermonitor.http.HttpApiServer;
 import com.aermini.servermonitor.http.response.ApiResponse;
 import com.aermini.servermonitor.log.LogIdGenerator;
@@ -12,7 +13,6 @@ import com.aermini.servermonitor.util.ServerInfoUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import com.sun.net.httpserver.HttpExchange;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -25,17 +25,17 @@ public class PlayerHandler {
     private final SkinDatabaseManager skinDB;
     private final LogManager logManager;
     private final PluginConfig config;
-    private final ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds;
+    private final BindStore bindStore;
 
     public PlayerHandler(AerServerMonitor plugin, PlayerDAO playerDAO, SkinDatabaseManager skinDB,
                          LogManager logManager, PluginConfig config,
-                         ConcurrentHashMap<String, AerServerMonitor.PendingBind> pendingBinds) {
+                         BindStore bindStore) {
         this.plugin = plugin;
         this.playerDAO = playerDAO;
         this.skinDB = skinDB;
         this.logManager = logManager;
         this.config = config;
-        this.pendingBinds = pendingBinds;
+        this.bindStore = bindStore;
     }
 
     public void handleInfo(HttpExchange exchange) {
@@ -190,14 +190,27 @@ public class PlayerHandler {
         String body = (String) exchange.getAttribute("rawBody");
         if (body == null) body = HttpApiServer.readBody(exchange);
 
-        JsonObject req = com.aermini.servermonitor.util.JsonUtil.parse(body);
+        JsonObject req;
+        try {
+            req = com.aermini.servermonitor.util.JsonUtil.parse(body);
+        } catch (Exception e) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "invalid json", logId), logManager);
+            return;
+        }
         if (req == null || !req.has("task") || !req.has("name") || !req.has("time")) {
             HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "missing task/name/time", logId), logManager);
             return;
         }
 
-        String task = req.get("task").getAsString();
-        String playerName = req.get("name").getAsString();
+        String task;
+        String playerName;
+        try {
+            task = req.get("task").getAsString();
+            playerName = req.get("name").getAsString();
+        } catch (Exception e) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "invalid task/name", logId), logManager);
+            return;
+        }
 
         // 绑定只认代理实时在线的人, 避免库里旧uuid脏数据误判
         ProxiedPlayer pp = ProxyServer.getInstance().getPlayer(playerName);
@@ -214,9 +227,9 @@ public class PlayerHandler {
         String uuid = pp.getUniqueId().toString();
         String code = String.format("%06d", new java.util.Random().nextInt(1000000));
 
-        pendingBinds.put(uuid, new AerServerMonitor.PendingBind(task, pp.getName(), uuid, code));
+        bindStore.put(new AerServerMonitor.PendingBind(task, pp.getName(), uuid, code));
 
-        String msg = config.getBindMessage().replace("{code}", code);
+        String msg = net.md_5.bungee.api.ChatColor.translateAlternateColorCodes('&', config.getBindMessage().replace("{code}", code));
         pp.sendMessage(new TextComponent(msg));
 
         JsonObject data = new JsonObject();

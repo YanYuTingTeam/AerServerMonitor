@@ -2,6 +2,7 @@ package com.aermini.servermonitor.database.dao;
 
 import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.DatabaseManager;
+import com.aermini.servermonitor.database.RedisManager;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
@@ -17,14 +18,16 @@ public class SkinDatabaseManager {
     private final PluginConfig config;
     private final Logger logger;
     private final DatabaseManager mainDb;
+    private final RedisManager redis;
     private HikariDataSource dataSource;
     private boolean available = false;
     private String tableName;
 
-    public SkinDatabaseManager(PluginConfig config, Logger logger, DatabaseManager mainDb) {
+    public SkinDatabaseManager(PluginConfig config, Logger logger, DatabaseManager mainDb, RedisManager redis) {
         this.config = config;
         this.logger = logger;
         this.mainDb = mainDb;
+        this.redis = redis;
         this.tableName = config.getSkinTable();
     }
 
@@ -42,7 +45,7 @@ public class SkinDatabaseManager {
                 String path = config.getSkinDbAddress();
                 if (path.isEmpty()) path = new File(config.getDataFolder(), "skin.db").getAbsolutePath();
                 hikari.setJdbcUrl("jdbc:h2:" + path + ";AUTO_SERVER=TRUE;MODE=MySQL");
-                hikari.setDriverClassName("org.h2.Driver");
+                hikari.setDriverClassName(org.h2.Driver.class.getName());
             } else {
                 hikari.setJdbcUrl("jdbc:mysql://" + config.getSkinDbAddress() + "/" + config.getSkinDbName()
                         + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC");
@@ -72,7 +75,14 @@ public class SkinDatabaseManager {
     public String getSkinUuid(String playerUuid) {
         if (!available) return playerUuid;
 
+        String cacheKey = redis.key("skin:" + playerUuid);
+        if (redis.isAvailable()) {
+            String cached = redis.get(cacheKey);
+            if (cached != null) return cached;
+        }
+
         String type = config.getSkinDbType().toLowerCase();
+        String skin = playerUuid;
         Connection conn = null;
         try {
             if ("monitor".equals(type)) {
@@ -86,11 +96,15 @@ public class SkinDatabaseManager {
             ps.setString(1, playerUuid);
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
-                return rs.getString("skin");
+                String value = rs.getString("skin");
+                if (value != null && !value.isEmpty()) skin = value;
             }
         } catch (SQLException ignored) {} finally {
             if (conn != null) try { conn.close(); } catch (SQLException ignored) {}
         }
-        return playerUuid;
+        if (redis.isAvailable()) {
+            redis.set(cacheKey, skin, 3600);
+        }
+        return skin;
     }
 }

@@ -12,6 +12,7 @@ public class PluginConfig {
     private final File dataFolder;
     private Configuration config;
     private final Gson gson = new Gson();
+    private volatile String runtimeInstanceId;
     public PluginConfig(File dataFolder) {
         this.dataFolder = dataFolder;
     }
@@ -68,6 +69,19 @@ public class PluginConfig {
     public int getRedisPort() { return config.getInt("redis.port", 6379); }
     public String getRedisPassword() { return config.getString("redis.password", ""); }
     public int getRedisDatabase() { return config.getInt("redis.database", 0); }
+    public boolean isRedisEnabled() { return config.getBoolean("redis.enabled", true); }
+    public String getRedisKeyPrefix() { return config.getString("redis.key-prefix", "aermonitor"); }
+    public String getRedisInstanceId() {
+        String id = config.getString("redis.instance-id", "");
+        if (id != null && !id.trim().isEmpty()) return id.trim();
+        if (runtimeInstanceId == null) {
+            runtimeInstanceId = "proxy-" + UUID.randomUUID().toString().substring(0, 8);
+        }
+        return runtimeInstanceId;
+    }
+    public int getRedisTimeoutMs() { return config.getInt("redis.timeout-ms", 1500); }
+    public int getRedisMaxWaitMs() { return config.getInt("redis.max-wait-ms", 2000); }
+    public boolean isRedisFeatureEnabled(String name) { return config.getBoolean("redis.features." + name, true); }
     public int getRedisPoolMaxTotal() { return config.getInt("redis.pool.max-total", 16); }
     public int getRedisPoolMaxIdle() { return config.getInt("redis.pool.max-idle", 8); }
     public int getRedisPoolMinIdle() { return config.getInt("redis.pool.min-idle", 2); }
@@ -134,6 +148,16 @@ public class PluginConfig {
     public String getDashboardPath() { return config.getString("options.dashboard.path", "/dashboard"); }
     public long getDashboardSessionExpire() { return config.getLong("options.dashboard.session-expire", 86400000); }
     public String getDashboardSecret() { return config.getString("options.dashboard.secret", "CHANGE_ME_TO_RANDOM_STRING"); }
+
+    public List<String> getCommandWhitelist() { return getStringList("options.dashboard.command-whitelist"); }
+    public List<String> getCommandBlacklist() {
+        List<String> list = getStringList("options.dashboard.command-blacklist");
+        if (list.isEmpty() && config.get("options.dashboard.command-blacklist") == null) {
+            return Arrays.asList("stop", "restart", "end", "reload", "greload", "op", "deop",
+                    "whitelist", "plugins", "send", "gkick", "alert", "alertraw");
+        }
+        return list;
+    }
 
     public List<String> getAllowedOrigins() { return getStringList("options.dashboard.allowed-origins"); }
 

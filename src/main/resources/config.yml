@@ -35,10 +35,24 @@ database:
       minimum-idle: 1
 
 redis:
+  enabled: true
   host: "127.0.0.1"
   port: 6379
   password: ""
   database: 0
+  key-prefix: "aermonitor"
+  # 留空则每次启动随机生成; 多 Bungee 共享 Redis 时建议手动填唯一值
+  instance-id: ""
+  timeout-ms: 1500
+  max-wait-ms: 2000
+  features:
+    rate-limit: true
+    login-guard: true
+    bind-store: true
+    presence: true
+    chat-queue: true
+    webhook-queue: true
+    ws-bus: false
   pool:
     max-total: 16
     max-idle: 8
@@ -109,6 +123,23 @@ options:
     allowed-origins: []
     # 是否对 POST/DELETE 等状态变更请求强制校验 Origin/Referer（CSRF 防护）
     csrf-protection: true
+    # 控制台命令白名单, 空数组表示不限制
+    command-whitelist: []
+    # 控制台命令黑名单, 命中即拒绝
+    command-blacklist:
+      - "stop"
+      - "restart"
+      - "end"
+      - "reload"
+      - "greload"
+      - "op"
+      - "deop"
+      - "whitelist"
+      - "plugins"
+      - "send"
+      - "gkick"
+      - "alert"
+      - "alertraw"
     login-security:
       max-attempts: 5
       window-ms: 300000

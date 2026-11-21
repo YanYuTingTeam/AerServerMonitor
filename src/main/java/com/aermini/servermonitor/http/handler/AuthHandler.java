@@ -2,6 +2,7 @@ package com.aermini.servermonitor.http.handler;
 
 import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.dao.AdminDAO;
+import com.aermini.servermonitor.database.redis.LoginGuard;
 import com.aermini.servermonitor.http.HttpApiServer;
 import com.aermini.servermonitor.http.response.ApiResponse;
 import com.aermini.servermonitor.log.LogIdGenerator;
@@ -14,24 +15,18 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 public class AuthHandler {
 
     private final PluginConfig config;
     private final AdminDAO adminDAO;
     private final LogManager logManager;
+    private final LoginGuard loginGuard;
 
-    private final Map<String, Integer> failCounts = new ConcurrentHashMap<>();
-    private final Map<String, Long> lockouts = new ConcurrentHashMap<>();
-    private final Map<String, Integer> lockoutCounts = new ConcurrentHashMap<>();
-    private final Map<String, Long> permanentBans = new ConcurrentHashMap<>();
-
-    public AuthHandler(PluginConfig config, AdminDAO adminDAO, LogManager logManager) {
+    public AuthHandler(PluginConfig config, AdminDAO adminDAO, LogManager logManager, LoginGuard loginGuard) {
         this.config = config;
         this.adminDAO = adminDAO;
         this.logManager = logManager;
+        this.loginGuard = loginGuard;
     }
 
     public void handleLogin(HttpExchange exchange) {
@@ -40,19 +35,15 @@ public class AuthHandler {
         String body = HttpApiServer.readBody(exchange);
 
         String banTarget = IpUtil.normalizeBanTarget(ip, config.getLoginBanScope());
-        if (permanentBans.containsKey(banTarget)) {
+        if (loginGuard.isPermanentlyBanned(banTarget)) {
             logManager.log("[SECURITY] Login attempt from permanently banned IP: " + ip);
             HttpApiServer.sendWithLog(exchange, 403, ApiResponse.error(403, 50003, "forbidden", logId), logManager);
             return;
         }
 
-        Long lockoutUntil = lockouts.get(ip);
-        if (lockoutUntil != null) {
-            if (System.currentTimeMillis() < lockoutUntil) {
-                HttpApiServer.sendWithLog(exchange, 429, ApiResponse.error(429, 50003, "too many attempts", logId), logManager);
-                return;
-            }
-            lockouts.remove(ip);
+        if (loginGuard.isLocked(ip)) {
+            HttpApiServer.sendWithLog(exchange, 429, ApiResponse.error(429, 50003, "too many attempts", logId), logManager);
+            return;
         }
 
         JsonObject req;
@@ -63,25 +54,32 @@ public class AuthHandler {
             return;
         }
 
-        String username = req.has("username") ? req.get("username").getAsString() : "";
-        String password = req.has("password") ? req.get("password").getAsString() : "";
+        String username;
+        String password;
+        try {
+            username = req.has("username") ? req.get("username").getAsString() : "";
+            password = req.has("password") ? req.get("password").getAsString() : "";
+        } catch (Exception e) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "invalid json", logId), logManager);
+            return;
+        }
 
         if (!username.matches("^[a-zA-Z0-9_]{3,32}$")) {
-            recordFailure(ip, banTarget);
+            logFailureResult(ip, banTarget, loginGuard.recordFailure(ip, banTarget));
             HttpApiServer.sendWithLog(exchange, 401, ApiResponse.error(401, 50001, "invalid credentials", logId), logManager);
             return;
         }
 
         JsonObject admin = adminDAO.authenticate(username, password);
         if (admin == null) {
-            recordFailure(ip, banTarget);
-            logManager.log("[AUTH] Login failed from " + ip + " (" + failCounts.getOrDefault(ip, 0) + "/" + config.getLoginMaxAttempts() + " attempts)");
+            int result = loginGuard.recordFailure(ip, banTarget);
+            logManager.log("[AUTH] Login failed from " + ip);
+            logFailureResult(ip, banTarget, result);
             HttpApiServer.sendWithLog(exchange, 401, ApiResponse.error(401, 50001, "invalid credentials", logId), logManager);
             return;
         }
 
-        failCounts.remove(ip);
-        lockouts.remove(ip);
+        loginGuard.recordSuccess(ip);
         adminDAO.updateLastLogin(admin.get("id").getAsInt(), ip);
 
         boolean needChange = admin.get("is_default").getAsBoolean();
@@ -201,18 +199,15 @@ public class AuthHandler {
         }
     }
 
-    private void recordFailure(String ip, String banTarget) {
-        int count = failCounts.compute(ip, (k, v) -> v == null ? 1 : v + 1);
-        if (count >= config.getLoginMaxAttempts()) {
-            failCounts.remove(ip);
-            int lockoutCount = lockoutCounts.compute(ip, (k, v) -> v == null ? 1 : v + 1);
-            lockouts.put(ip, System.currentTimeMillis() + config.getLoginLockoutMs());
-
-            if (lockoutCount >= config.getLoginPermanentBanThreshold()) {
-                permanentBans.put(banTarget, System.currentTimeMillis());
-                lockoutCounts.remove(ip);
-                logManager.log("[SECURITY] IP " + banTarget + " permanently banned. Reason: " + lockoutCount + " lockouts exceeded.");
-            }
+    private void logFailureResult(String ip, String banTarget, int result) {
+        if (result == 1) {
+            logManager.log("[SECURITY] IP " + ip + " locked after " + config.getLoginMaxAttempts() + " failed login attempts.");
+        } else if (result == 2) {
+            logManager.log("[SECURITY] Login attempt from locked IP: " + ip);
+        } else if (result == 3) {
+            logManager.log("[SECURITY] IP " + banTarget + " permanently banned. Reason: lockout threshold exceeded.");
+        } else if (result == 4) {
+            logManager.log("[SECURITY] Login attempt from permanently banned IP: " + banTarget);
         }
     }
 

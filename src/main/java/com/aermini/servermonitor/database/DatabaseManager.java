@@ -25,8 +25,8 @@ public class DatabaseManager {
         String type = config.getDbType().toLowerCase();
         if ("h2".equals(type)) {
             File dbFile = new File(config.getDataFolder(), "monitor.db");
-            hikari.setJdbcUrl("jdbc:h2:" + dbFile.getAbsolutePath() + ";AUTO_SERVER=TRUE;MODE=MySQL");
-            hikari.setDriverClassName("org.h2.Driver");
+                hikari.setJdbcUrl("jdbc:h2:" + dbFile.getAbsolutePath() + ";AUTO_SERVER=TRUE;MODE=MySQL");
+                hikari.setDriverClassName(org.h2.Driver.class.getName());
         } else {
             hikari.setJdbcUrl("jdbc:mysql://" + config.getDbAddress() + "/" + config.getDbName()
                     + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8");

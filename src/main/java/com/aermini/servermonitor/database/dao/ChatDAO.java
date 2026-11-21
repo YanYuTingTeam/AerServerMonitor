@@ -37,22 +37,39 @@ public class ChatDAO {
         } catch (SQLException ignored) {}
     }
 
-    public void insertChatBatch(List<Object[]> records) {
-        if (records.isEmpty()) return;
+    public boolean insertChatBatch(List<Object[]> records) {
+        if (records.isEmpty()) return true;
         String sql = "INSERT INTO " + db.prefix() + "chat (name, uuid, ip, servername, time, msgid, content) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = db.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
-            for (Object[] rec : records) {
-                ps.setString(1, (String) rec[0]);
-                ps.setString(2, (String) rec[1]);
-                ps.setString(3, (String) rec[2]);
-                ps.setString(4, (String) rec[3]);
-                ps.setLong(5, (Long) rec[4]);
-                ps.setString(6, (String) rec[5]);
-                ps.setString(7, (String) rec[6]);
-                ps.addBatch();
+            boolean oldAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                for (Object[] rec : records) {
+                    ps.setString(1, (String) rec[0]);
+                    ps.setString(2, (String) rec[1]);
+                    ps.setString(3, (String) rec[2]);
+                    ps.setString(4, (String) rec[3]);
+                    ps.setLong(5, (Long) rec[4]);
+                    ps.setString(6, (String) rec[5]);
+                    ps.setString(7, (String) rec[6]);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                conn.commit();
+                return true;
+            } catch (SQLException e) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ignored) {}
+                return false;
+            } finally {
+                try {
+                    conn.setAutoCommit(oldAutoCommit);
+                } catch (SQLException ignored) {}
             }
-            ps.executeBatch();
-        } catch (SQLException ignored) {}
+        } catch (SQLException e) {
+            return false;
+        }
     }
 
     public JsonArray getHistory(Long timeFrom, Long timeTo, int limit, int offset) {

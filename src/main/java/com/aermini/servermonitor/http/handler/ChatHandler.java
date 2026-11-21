@@ -1,6 +1,7 @@
 package com.aermini.servermonitor.http.handler;
 
 import com.aermini.servermonitor.AerServerMonitor;
+import com.aermini.servermonitor.config.PluginConfig;
 import com.aermini.servermonitor.database.dao.ChatDAO;
 import com.aermini.servermonitor.http.HttpApiServer;
 import com.aermini.servermonitor.http.response.ApiResponse;
@@ -8,18 +9,18 @@ import com.aermini.servermonitor.log.LogIdGenerator;
 import com.aermini.servermonitor.log.LogManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import java.util.Map;
-import java.util.logging.Handler;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import com.sun.net.httpserver.HttpExchange;
+import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.ProxyServer;
-import net.md_5.bungee.api.chat.TextComponent;
+import net.md_5.bungee.api.chat.BaseComponent;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ChatHandler {
 
@@ -39,42 +40,29 @@ public class ChatHandler {
         String body = (String) exchange.getAttribute("rawBody");
         if (body == null) body = HttpApiServer.readBody(exchange);
 
-        String command = body.startsWith("/") ? body : "/" + body;
+        String command = body.trim();
+        if (command.startsWith("/")) command = command.substring(1).trim();
 
-        Logger bungeeRoot = Logger.getLogger("");
-        CapturingHandler captor = new CapturingHandler();
-        captor.setLevel(java.util.logging.Level.ALL);
-        bungeeRoot.addHandler(captor);
+        if (command.isEmpty()) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "Command cannot be empty", logId), logManager);
+            return;
+        }
+        if (command.length() > 512) {
+            HttpApiServer.sendWithLog(exchange, 400, ApiResponse.error(400, 0, "Command too long", logId), logManager);
+            return;
+        }
 
-        PrintStream oldOut = System.out;
-        PrintStream oldErr = System.err;
-        ByteArrayOutputStream outBuf = new ByteArrayOutputStream();
-        ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(outBuf, true));
-        System.setErr(new PrintStream(errBuf, true));
+        String commandName = command.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
+        if (!isCommandAllowed(commandName)) {
+            HttpApiServer.sendWithLog(exchange, 403, ApiResponse.error(403, 30004, "Command not allowed", logId), logManager);
+            return;
+        }
 
+        ConsoleCommandSender sender = new ConsoleCommandSender();
         String collectedOutput;
         try {
-            boolean success = ProxyServer.getInstance().getPluginManager().dispatchCommand(
-                    ProxyServer.getInstance().getConsole(), command);
-
-            try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-
-            collectedOutput = captor.getCollected();
-            String outStr = outBuf.toString("UTF-8");
-            String errStr = errBuf.toString("UTF-8");
-
-            StringBuilder full = new StringBuilder();
-            if (!outStr.isEmpty()) full.append(outStr);
-            if (!collectedOutput.isEmpty()) {
-                if (full.length() > 0 && full.charAt(full.length() - 1) != '\n') full.append('\n');
-                full.append(collectedOutput);
-            }
-            if (!errStr.isEmpty()) {
-                if (full.length() > 0 && full.charAt(full.length() - 1) != '\n') full.append('\n');
-                full.append(errStr);
-            }
-            collectedOutput = full.toString().trim();
+            boolean success = ProxyServer.getInstance().getPluginManager().dispatchCommand(sender, command);
+            collectedOutput = sender.getCollected();
 
             logManager.log("[CMD] Console executed " + command + " -> " + collectedOutput.replaceAll("\\s+", " "));
 
@@ -94,28 +82,29 @@ public class ChatHandler {
             HttpApiServer.sendWithLog(exchange, 200, ApiResponse.error(200, 0, message, logId, data), logManager);
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : "Unknown error";
-            String partial = captor.getCollected();
-            String errStr = errBuf.toString().trim();
+            String partial = sender.getCollected();
 
             StringBuilder full = new StringBuilder();
             if (!partial.isEmpty()) full.append(partial);
-            if (!errStr.isEmpty()) {
-                if (full.length() > 0 && full.charAt(full.length() - 1) != '\n') full.append('\n');
-                full.append(errStr);
-            }
-            if (full.length() > 0) {
-                if (full.charAt(full.length() - 1) != '\n') full.append('\n');
-                full.append(msg);
-            } else {
-                full.append(msg);
-            }
+            if (full.length() > 0) full.append('\n');
+            full.append(msg);
             JsonObject data = new JsonObject();
             HttpApiServer.sendWithLog(exchange, 500, ApiResponse.error(500, 30002, full.toString().trim(), logId, data), logManager);
-        } finally {
-            bungeeRoot.removeHandler(captor);
-            System.setOut(oldOut);
-            System.setErr(oldErr);
         }
+    }
+
+    private boolean isCommandAllowed(String commandName) {
+        PluginConfig config = plugin.getConfig();
+        List<String> whitelist = config.getCommandWhitelist();
+        if (!whitelist.isEmpty() && !containsCommand(whitelist, commandName)) return false;
+        return !containsCommand(config.getCommandBlacklist(), commandName);
+    }
+
+    private boolean containsCommand(List<String> list, String commandName) {
+        for (String item : list) {
+            if (item != null && item.trim().toLowerCase(Locale.ROOT).equals(commandName)) return true;
+        }
+        return false;
     }
 
     public void handleHistory(HttpExchange exchange) {
@@ -139,30 +128,64 @@ public class ChatHandler {
         HttpApiServer.sendWithLog(exchange, 200, ApiResponse.success(logId, data), logManager);
     }
 
-    private static class CapturingHandler extends Handler {
-        private final List<String> lines = new ArrayList<>();
+    private static class ConsoleCommandSender implements CommandSender {
+        private final List<String> messages = new CopyOnWriteArrayList<>();
 
         @Override
-        public void publish(LogRecord record) {
-            if (record.getMessage() == null) return;
-
-            String msg = record.getMessage();
-            lines.add(format(record, msg));
-        }
-
-        private String format(LogRecord record, String msg) {
-
-            return msg;
+        public String getName() {
+            return "AerMonitor-Console";
         }
 
         @Override
-        public void flush() {}
+        public void sendMessage(String message) {
+            if (message != null) messages.add(message);
+        }
 
         @Override
-        public void close() {}
+        public void sendMessages(String... messages) {
+            for (String msg : messages) {
+                sendMessage(msg);
+            }
+        }
+
+        @Override
+        public void sendMessage(BaseComponent... message) {
+            if (message != null && message.length > 0) {
+                messages.add(BaseComponent.toPlainText(message));
+            }
+        }
+
+        @Override
+        public void sendMessage(BaseComponent message) {
+            if (message != null) messages.add(message.toPlainText());
+        }
+
+        @Override
+        public Collection<String> getGroups() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public void addGroups(String... groups) {}
+
+        @Override
+        public void removeGroups(String... groups) {}
+
+        @Override
+        public boolean hasPermission(String permission) {
+            return true;
+        }
+
+        @Override
+        public void setPermission(String permission, boolean value) {}
+
+        @Override
+        public Collection<String> getPermissions() {
+            return Collections.singleton("*");
+        }
 
         String getCollected() {
-            return String.join("\n", lines);
+            return String.join("\n", messages);
         }
     }
 }

@@ -1,0 +1,37 @@
+# AerServerMonitor 消息配置
+# 颜色码支持 & 或 §, 支持占位符
+monitor:
+  info:
+    - "§4§m=============§r§6 §lAerServerMonitor §r§4§m============="
+    - "        §6§lAerServerMonitor §r§fv1.0 §8| §b§lYanYuTing"
+    - " §7Projects:"
+    - "    §bhttps://github.com/YanYuTingTeam/AerServerMonitor"
+    - " §7Authors:"
+    - "    §eAerMini §8| §dhttps://github.com/AerMini2024"
+    - " §7Usage:"
+    - "    §f/asm reload"
+    - "§4§m=============================================="
+  reload-success: "§7§l▎ §6§lAerServerMonitor §r§a● §7配置已重载"
+  reload-fail: "§7§l▎ §6§lAerServerMonitor §r§c● §7重载失败: {error}"
+  unknown-command: "§7§l▎ §6§lAerServerMonitor §r§e● §7命令未知. Usage: §f/asm §breload"
+  no-permission: "§7§l▎ §6§lAerServerMonitor §r§c● §7你没有权限使用这个命令"
+verify:
+  usage: "§7正确的用法是 §b/verify §f<验证码> §7. 请留意你输入的内容"
+  console-only: "§7该命令只能由玩家使用"
+  no-pending: "§7你还没有待验证的绑定请求, 无法使用该命令"
+  wrong-code: "§c验证码错误"
+  callback-missing: "§7绑定回调未配置, 请联系管理员"
+  success: "§f恭喜你 &b{player}&f, 你已成功绑定你的&6Space&f账号"
+  fail-status: "&f绑定失败 &7(&b{status}&7)"
+  fail-error: "&c绑定失败, 请稍后重试"
+irc:
+  no-permission: "§7§l▎ §6§lIRC §r§c● §7你没有权限使用这个命令"
+  usage: "§7§l▎ §6§lIRC §r§e● §7用法: §b/irc §f<消息>"
+  too-long: "§7§l▎ §6§lIRC §r§c● §7消息过长 (最多 {max} 字符)"
+  enabled: "§7§l▎ §6§lIRC §r§a● §7IRC 已启用, 你将接收内部通讯"
+  already-enabled: "§7§l▎ §6§lIRC §r§e● §7IRC 已处于启用状态"
+  disabled: "§7§l▎ §6§lIRC §r§c● §7IRC 已禁用, 不再接收内部通讯"
+  not-enabled: "§7§l▎ §6§lIRC §r§e● §7IRC 尚未启用"
+  console-only: "§7§l▎ §6§lIRC §r§c● §7该命令只能由玩家使用"
+  missing-irc-perm: "§7§l▎ §6§lIRC §r§c● §7你缺少 aerservermonitor.irc 权限, 启用后也不会收到消息"
+  format: "§8[§6§lIRC§8] §e{name} §8(§7{server}§8) §8» §f{message}"
