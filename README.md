@@ -390,11 +390,9 @@ logs:
 |------|------|------|
 | `/asm` / `/asmonitor` / `/aerservermonitor` | `aerservermonitor.info` | 查看插件信息 |
 | `/asm reload` | `aerservermonitor.admin` | 热重载 config.yml |
-| `/ircon` | `aerservermonitor.irccon` | 个人启用 IRC 内部通讯 |
-| `/ircoff` | `aerservermonitor.irccon` | 个人禁用 IRC 内部通讯 |
-| `/irc <msg>` | `aerservermonitor.irc` | 发送 IRC 内部通讯消息 (未启用时仅自己看不到广播) |
+| `/irc <msg>` | `aerservermonitor.irc` | 发送 IRC 内部通讯消息 |
 
-`aerservermonitor.*` 权限节点默认均不授予, 需在权限插件中手动给 (未授予 `aerservermonitor.info` 时玩家收到无权限提示, 看不到插件信息)。典型管理员应同时持有 `aerservermonitor.irc` 与 `aerservermonitor.irccon`; IRC 状态仅存内存, 重启后恢复默认关闭; 消息会同步输出到控制台; 若服务器装有其他注册 `/irc` 同名命令的插件会按加载顺序互相覆盖。旧权限节点 `aermonitor.info` / `aermonitor.admin` 已废弃, 需重新授权
+`aerservermonitor.*` 权限节点默认均不授予, 需在权限插件中手动给 (未授予 `aerservermonitor.info` 时玩家收到无权限提示, 看不到插件信息)。持有 `aerservermonitor.irc` 即强制接收 IRC, 无法个人关闭; 消息会同步输出到控制台; 若服务器装有其他注册 `/irc` 同名命令的插件会按加载顺序互相覆盖。旧权限节点 `aermonitor.info` / `aermonitor.admin` / `aerservermonitor.irccon` 已废弃, 需重新授权
 
 ---
 

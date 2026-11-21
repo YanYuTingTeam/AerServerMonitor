@@ -147,30 +147,6 @@ public class MessageManager {
         return get("irc.too-long", "§7§l▎ §6§lIRC §r§c● §7消息过长 (最多 {max} 字符)");
     }
 
-    public String ircEnabled() {
-        return get("irc.enabled", "§7§l▎ §6§lIRC §r§a● §7IRC 已启用, 你将接收内部通讯");
-    }
-
-    public String ircAlreadyEnabled() {
-        return get("irc.already-enabled", "§7§l▎ §6§lIRC §r§e● §7IRC 已处于启用状态");
-    }
-
-    public String ircDisabled() {
-        return get("irc.disabled", "§7§l▎ §6§lIRC §r§c● §7IRC 已禁用, 不再接收内部通讯");
-    }
-
-    public String ircNotEnabled() {
-        return get("irc.not-enabled", "§7§l▎ §6§lIRC §r§e● §7IRC 尚未启用");
-    }
-
-    public String ircConsoleOnly() {
-        return get("irc.console-only", "§7§l▎ §6§lIRC §r§c● §7该命令只能由玩家使用");
-    }
-
-    public String ircMissingIrcPerm() {
-        return get("irc.missing-irc-perm", "§7§l▎ §6§lIRC §r§c● §7你缺少 aerservermonitor.irc 权限, 启用后也不会收到消息");
-    }
-
     public String ircFormat() {
         return get("irc.format", "§8[§6§lIRC§8] §e{name} §8(§7{server}§8) §8» §f{message}");
     }

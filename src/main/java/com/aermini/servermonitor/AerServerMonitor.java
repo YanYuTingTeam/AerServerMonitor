@@ -1,7 +1,6 @@
 package com.aermini.servermonitor;
 
 import com.aermini.servermonitor.command.IrcChatCommand;
-import com.aermini.servermonitor.command.IrcToggleCommand;
 import com.aermini.servermonitor.command.MonitorCommand;
 import com.aermini.servermonitor.command.VerifyCommand;
 import com.aermini.servermonitor.config.MessageManager;
@@ -170,8 +169,6 @@ public class AerServerMonitor extends Plugin {
 
             ircManager = new IrcManager(messageManager);
             getProxy().getPluginManager().registerCommand(this, new IrcChatCommand(ircManager, messageManager));
-            getProxy().getPluginManager().registerCommand(this, new IrcToggleCommand(ircManager, messageManager, true));
-            getProxy().getPluginManager().registerCommand(this, new IrcToggleCommand(ircManager, messageManager, false));
 
             logger.info("v1.0 loaded.");
             logger.info("HTTP: " + pluginConfig.getHttpPort() + " | WS: " + pluginConfig.getWsPort() + " | Dashboard: http://localhost:" + pluginConfig.getHttpPort() + pluginConfig.getDashboardPath());
