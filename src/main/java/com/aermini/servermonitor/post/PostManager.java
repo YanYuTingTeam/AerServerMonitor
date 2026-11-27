@@ -26,8 +26,6 @@ public class PostManager {
     private static final String PROCESSING_KEY = "webhook:processing";
     private static final String DELAY_KEY = "webhook:delay";
     private static final String DEAD_KEY = "webhook:dead";
-    private static final String DONE_KEY = "webhook:done:";
-    private static final int DONE_TTL_SECONDS = 86400;
     private static final String DELAY_SCRIPT =
             "local items=redis.call('ZRANGEBYSCORE',KEYS[1],0,ARGV[1],'LIMIT',0,50)\n" +
             "for _,item in ipairs(items) do\n" +
@@ -72,7 +70,7 @@ public class PostManager {
     public void start() {
         if (running) return;
         running = true;
-        if (!config.isRedisFeatureEnabled("webhook-queue")) return;
+        if (postUrls.isEmpty() || !config.isRedisFeatureEnabled("webhook-queue")) return;
 
         if (useRedisQueue()) {
             try {
@@ -124,28 +122,21 @@ public class PostManager {
 
     private void enqueueRedis(EventType eventType, String url, String payload) {
         String eventId = extractEventId(payload);
-        String doneKey = redis.key(DONE_KEY + eventId);
-        Boolean dedup = redis.setNxOrNull(doneKey, "1", DONE_TTL_SECONDS);
-        if (Boolean.FALSE.equals(dedup)) return;
-        if (Boolean.TRUE.equals(dedup)) {
-            Long queueSize = redis.llen(redis.key(QUEUE_KEY));
-            if (queueSize != null && queueSize >= config.getAsyncWebhookQueueMax()) {
-                redis.del(doneKey);
-                logger.warning("Webhook queue full, dropped event " + eventId);
-                return;
-            }
-            try {
-                JsonObject job = new JsonObject();
-                job.addProperty("eventid", eventId);
-                job.addProperty("eventType", eventType.getKey());
-                job.addProperty("url", url);
-                job.addProperty("body", payload);
-                job.addProperty("attempt", 0);
-                if (redis.lpush(redis.key(QUEUE_KEY), job.toString())) return;
-            } catch (Exception e) {
-                logger.warning("Webhook enqueue failed: " + e.getMessage());
-            }
-            redis.del(doneKey);
+        Long queueSize = redis.llen(redis.key(QUEUE_KEY));
+        if (queueSize != null && queueSize >= config.getAsyncWebhookQueueMax()) {
+            logger.warning("Webhook queue full, dropped event " + eventId);
+            return;
+        }
+        try {
+            JsonObject job = new JsonObject();
+            job.addProperty("eventid", eventId);
+            job.addProperty("eventType", eventType.getKey());
+            job.addProperty("url", url);
+            job.addProperty("body", payload);
+            job.addProperty("attempt", 0);
+            if (redis.lpush(redis.key(QUEUE_KEY), job.toString())) return;
+        } catch (Exception e) {
+            logger.warning("Webhook enqueue failed: " + e.getMessage());
         }
         doPost(url, payload, eventType.getKey(), 1);
     }
@@ -203,14 +194,7 @@ public class PostManager {
             return;
         }
 
-        String sentKey = redis.key("webhook:sent:" + eventId);
-        if (redis.exists(sentKey)) {
-            redis.lrem(redis.key(PROCESSING_KEY), 1, jobJson);
-            return;
-        }
-
         if (doPostOnce(url, body)) {
-            redis.set(sentKey, "1", DONE_TTL_SECONDS);
             redis.lrem(redis.key(PROCESSING_KEY), 1, jobJson);
             logManager.log("[POST] " + eventType + " -> " + url + " ok (attempt " + (attempt + 1) + ")");
             return;
@@ -233,7 +217,6 @@ public class PostManager {
         redis.lrem(redis.key(PROCESSING_KEY), 1, jobJson);
         redis.lpush(redis.key(DEAD_KEY), jobJson);
         redis.ltrim(redis.key(DEAD_KEY), 0, 499);
-        redis.del(redis.key(DONE_KEY + eventId));
         webhookLogDAO.insert(eventId, eventType, url, body);
         logManager.log("[POST] " + eventType + " -> " + url + " DEAD after " + attempt + " attempts.");
     }

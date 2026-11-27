@@ -16,7 +16,6 @@ public class ChatQueue {
     private static final int LOCAL_QUEUE_SIZE = 10000;
     private static final int RECENT_MAX = 200;
     private static final int RECENT_TTL_SECONDS = 604800;
-    private static final int DONE_TTL_SECONDS = 86400;
 
     private final PluginConfig config;
     private final RedisManager redis;
@@ -112,7 +111,6 @@ public class ChatQueue {
         if (redisItems.isEmpty() && localItems.isEmpty()) return;
 
         List<String> acceptedRedis = new ArrayList<>();
-        List<String> doneKeys = new ArrayList<>();
         List<Object[]> records = new ArrayList<>();
 
         for (String json : redisItems) {
@@ -122,25 +120,11 @@ public class ChatQueue {
                 logger.warning("Invalid chat queue item dropped.");
                 continue;
             }
-            String msgid = getString(obj, "msgid");
-            String doneKey = null;
-            boolean markDone = false;
-            if (!msgid.isEmpty()) {
-                doneKey = redis.key("chat:done:" + msgid);
-                Boolean dedup = redis.setNxOrNull(doneKey, "1", DONE_TTL_SECONDS);
-                if (Boolean.FALSE.equals(dedup)) {
-                    redis.lrem(redis.key("chat:processing"), 1, json);
-                    continue;
-                }
-                markDone = Boolean.TRUE.equals(dedup);
-            }
             Object[] record = toRecord(obj);
             if (record == null) {
-                if (markDone) redis.del(doneKey);
                 redis.lrem(redis.key("chat:processing"), 1, json);
                 continue;
             }
-            if (markDone) doneKeys.add(doneKey);
             acceptedRedis.add(json);
             records.add(record);
         }
@@ -164,9 +148,6 @@ public class ChatQueue {
             for (String json : acceptedRedis) {
                 redis.lrem(redis.key("chat:processing"), 1, json);
                 redis.lpush(redis.key("chat:queue"), json);
-            }
-            for (String doneKey : doneKeys) {
-                redis.del(doneKey);
             }
             for (String json : localItems) {
                 if (!localQueue.offer(json)) {
